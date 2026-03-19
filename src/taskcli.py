@@ -50,6 +50,8 @@ try:
         tasklist = json.load(f)
     with open(config_file, "r") as f:
         config = json.load(f)
+    if config["auto_clear_done_tasks"]:
+        tasklist = [task for task in tasklist if task.get("status") != "done"]
 except Exception as error:
     if isinstance(error, FileNotFoundError):
         with open(tasks_file, "w") as f:
@@ -121,6 +123,15 @@ mark_parser.add_argument(
 )
 
 list_parser = subparsers.add_parser("list", help="lists the tasklist", aliases=["view"])
+list_parser.add_argument(
+    "-p",
+    "--priority",
+    help="Filters based on priority",
+    choices=Task.valid_priorities,
+)
+list_parser.add_argument(
+    "-s", "--status", help="Filters based on status", choices=Task.valid_statuses
+)
 
 clear_parser = subparsers.add_parser("clear", help="clears the tasklist")
 clear_parser.add_argument(
@@ -140,7 +151,7 @@ def find_task(target_id) -> dict:
     return next((task for task in tasklist if task["id"] == target_id), None)
 
 
-def list_tasks() -> None:
+def list_tasks(filters: dict[str, str | None] = {}) -> None:
     if len(tasklist) == 0:
         print("There are no tasks in the tasklist.", style="info")
         return
@@ -161,6 +172,16 @@ def list_tasks() -> None:
         table.add_column(column)
     for task in tasklist:
         task_data = []
+        print(
+            task["priority"],
+            filters.get("priority"),
+            task["status"],
+            filters.get("status"),
+        )
+        if filters.get("priority") and task["priority"] == filters.get("priority"):
+            continue
+        if filters.get("status") and task["status"] == filters.get("status"):
+            continue
         for column in table_columns:
             if column.lower() == "priority" and config["show_priority_colors"]:
                 task_data.append(
@@ -354,14 +375,13 @@ match args.command:
     case "mark":
         mark_task(args.id, args.status)
     case "list" | "view":
-        list_tasks()
+        list_tasks({"priority": args.priority, "status": args.status})
     case "clear":
         clear_tasks()
     case "config" | "configure" | "settings":
         configure_settings(config)
     case _:
         print("what happened")
-
 
 with open(tasks_file, "w", encoding="utf-8") as f:
     json.dump(tasklist, f, indent=4)
