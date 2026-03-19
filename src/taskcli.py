@@ -1,11 +1,12 @@
 import argparse
 import json
 from pathlib import Path
-from os import getenv, makedirs
+from os import makedirs
 import rich
 from rich.console import Console
 from rich.theme import Theme
 import questionary
+from datetime import datetime, timedelta
 
 
 custom_color_themes = Theme(
@@ -31,7 +32,7 @@ def format_whitespace(data: list[str] | str | None) -> str | None:
 
 print("")  # more aesthetically pleasing
 default_config = {
-    "show_columns": ["ID", "Name", "Status", "Priority"],
+    "show_columns": ["ID", "Name", "Status", "Priority", "Duedate"],
     "table_show_lines": True,
     "show_priority_colors": True,
     "default_priority": "medium",
@@ -65,11 +66,12 @@ class Task:
     valid_statuses: tuple[str] = ("todo", "done")
     valid_priorities: tuple[str] = ("low", "medium", "high", "urgent")
 
-    def __init__(self, name, priority):
+    def __init__(self, name, priority, duedate):
         self.name = name
         self._id = max((task["id"] for task in tasklist), default=0) + 1
         self.status = "todo"
         self.priority = priority
+        self.duedate = duedate
 
     def to_dict(self) -> dict:
         return {
@@ -77,6 +79,7 @@ class Task:
             "id": self._id,
             "status": self.status,
             "priority": self.priority,
+            "duedate": self.duedate,
         }
 
     @property
@@ -100,6 +103,13 @@ add_parser.add_argument(
     type=str.lower,
     default=config["default_priority"],
 )
+add_parser.add_argument(
+    "-d",
+    "--due",
+    help="The task duedate (DD-MM-YYYY) or today, tomorrow, next week, etc",
+    default="None",
+    type=str.lower,
+)
 
 delete_parser = subparsers.add_parser(
     "delete", help="deletes a task", aliases=["remove", "del", "rm"]
@@ -107,7 +117,7 @@ delete_parser = subparsers.add_parser(
 delete_parser.add_argument("id", help="The ID of the task deleted", type=int)
 
 update_parser = subparsers.add_parser(
-    "update", help="updates a task's name/description"
+    "update", help="upshortcuts a task's name/description"
 )
 update_parser.add_argument("id", help="The ID of the task updated", type=int)
 update_parser.add_argument("-n", "--name", help="the updated name", nargs="+")
@@ -151,6 +161,38 @@ def find_task(target_id) -> dict:
     return next((task for task in tasklist if task["id"] == target_id), None)
 
 
+def determine_date(date_input: str | None) -> str:
+    if date_input is None:
+        return "None"
+    today: str = datetime.now()
+    date_input = date_input.replace("/", "-").strip()
+    shortcuts = {
+        "today": today,
+        "tomorrow": today + timedelta(days=1),
+        "next-week": today + timedelta(days=7),
+        "next-2-weeks": today + timedelta(days=14),
+        "next-month": today + timedelta(days=30),
+    }
+    if date_input in shortcuts.keys():
+        return shortcuts[date_input].strftime("%d-%m-%Y")
+
+    formats = ("%d-%m-%Y", "%d-%m")
+
+    for format in formats:
+        try:
+            date_obj = datetime.strptime(date_input, format)
+            if format == "%d-%m":
+                date_obj = date_obj.replace(year=today.year)
+            return date_obj.strftime("%d-%m-%Y")
+        except Exception:
+            continue
+    print(
+        "your date formats wrong, it has to be in days months years you fucking dumbass",
+        style="error",
+    )
+    return None
+
+
 def list_tasks(filters: dict[str, str | None] = {}) -> None:
     if len(tasklist) == 0:
         print("There are no tasks in the tasklist.", style="info")
@@ -162,7 +204,7 @@ def list_tasks(filters: dict[str, str | None] = {}) -> None:
         "urgent": "bold red",
     }
     table = rich.table.Table(
-        title="Tasklist",
+        title="TASKLIST:",
         title_justify="left",
         show_lines=config["table_show_lines"],
         title_style="info",
@@ -172,12 +214,6 @@ def list_tasks(filters: dict[str, str | None] = {}) -> None:
         table.add_column(column)
     for task in tasklist:
         task_data = []
-        print(
-            task["priority"],
-            filters.get("priority"),
-            task["status"],
-            filters.get("status"),
-        )
         if filters.get("priority") and task["priority"] == filters.get("priority"):
             continue
         if filters.get("status") and task["status"] == filters.get("status"):
@@ -188,13 +224,13 @@ def list_tasks(filters: dict[str, str | None] = {}) -> None:
                     f"[{priority_color[task['priority']]}]{task['priority']}[/{priority_color[task['priority']]}]"
                 )
             else:
-                task_data.append(str(task[column.lower()]))
+                task_data.append(str(task.get(column.lower(), "None")))
         table.add_row(*task_data)
     console.print(table)
 
 
-def add_task(task_name: str, task_priority) -> None:
-    new_task = Task(task_name, task_priority).to_dict()
+def add_task(task_name: str, task_priority, duedate) -> None:
+    new_task = Task(task_name, task_priority, duedate).to_dict()
     tasklist.append(new_task)
     print(f"Successfully added new task: {task_name}", style="success")
 
@@ -304,7 +340,7 @@ def configure_settings(config) -> None:  # saves it directly in the function
 
     def configure_toggled_columns() -> dict:
         config["show_columns"] = questionary.checkbox(
-            "Toggle Visibility", choices=("ID", "Name", "Status", "Priority")
+            "Toggle Visibility", choices=("ID", "Name", "Status", "Priority", "Duedate")
         ).ask()
         return config
 
@@ -366,7 +402,8 @@ args = parser.parse_args()
 match args.command:
     case "add":
         args.name = format_whitespace(args.name)
-        add_task(args.name, args.priority)
+        args.due = determine_date(args.due)
+        add_task(args.name, args.priority, args.due)
         list_tasks()
     case "delete" | "del" | "remove" | "rm":
         del_task(args.id)
@@ -391,10 +428,9 @@ print("")  # to also make it look better
 # Features:
 # [x] add, delete, update, list tasks
 # [x] priority levels, colored text
-# duedates (ex: --due friday, --due 3-13-2027, --due today, --due tomorrow)
-# list task today (filters pretty much)
+# [x] dueshortcuts (ex: --due friday, --due 3-13-2027, --due today, --due tomorrow)
+# [x] list task today (filters pretty much)
 # task created_at, and completed_at, so we can create a report to see how productive you were
-# be able to sort tasks based off something, status, time added or completed, etc
 # [x] settings or config
 # task undo/redo should exist
 # [x] be able to access this taskcli anywhere in the cmd
