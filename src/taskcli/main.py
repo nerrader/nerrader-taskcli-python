@@ -21,7 +21,7 @@ task_manager = (
 
 @app.command("add")
 def add_task(
-    name: Annotated[str, typer.Argument(help="The name of the task")],
+    name: Annotated[list[str], typer.Argument(help="The name of the task")],
     priority: Annotated[
         str, typer.Option("--priority", "-p", help="The priority of the created task")
     ] = "medium",
@@ -31,12 +31,8 @@ def add_task(
     Raises:
         typer.BadParameter: If the priority provided by the user is not a valid priority, raise this error.
     """
-    if priority not in tasks.Task.VALID_PRIORITIES:
-        raise typer.BadParameter(
-            f"Invalid priority: '{priority}'. Must be one of {tasks.Task.VALID_PRIORITIES}"
-        )
-
-    results = task_manager.add_task(name.strip(), priority)
+    name = (" ".join(name)).strip()
+    results = task_manager.add_task(name, priority=priority)
     print(results)
     display_tasks_table()
 
@@ -61,7 +57,7 @@ def delete_task(
 def update_task(
     task_id: int,
     updated_name: Annotated[
-        str | None, typer.Option("--name", "-n", help="The updated name")
+        list[str] | None, typer.Option("--name", "-n", help="The updated name")
     ] = None,
     updated_priority: Annotated[
         str | None, typer.Option("--priority", "-p", help="The updated priority")
@@ -78,27 +74,12 @@ def update_task(
         typer.BadParameter: The user did not enter a valid priority
         typer.BadParameter (x2): The user did not have a name nor priority attribute to update.
     """
-    updated_name = updated_name.strip() if updated_name is not None else None
-    updated_priority = (
-        updated_priority.strip() if updated_priority is not None else None
-    )
-    if (
-        updated_priority is not None
-        and updated_priority not in tasks.Task.VALID_PRIORITIES
-    ):
-        raise typer.BadParameter(
-            f"Invalid priority: '{updated_priority}'. Must be one of {tasks.Task.VALID_PRIORITIES}"
-        )
     raw_updated_contents = {
-        "name": updated_name,
+        "name": (" ".join(updated_name)) if updated_name else None,
         "priority": updated_priority,
     }
-    updated_contents = {
-        key: value for key, value in raw_updated_contents.items() if value is not None
-    }
-    if not updated_contents:
-        raise typer.BadParameter("The updated contents is empty.")
-    results = task_manager.update_task(task_id, updated_contents)
+    # it will validate it
+    results = task_manager.update_task(task_id, raw_updated_contents)
     print(results)
     display_tasks_table()
 
@@ -125,7 +106,7 @@ def display_tasks_table() -> None:
     """This is an internal CLI Command to display the rich table based off the tasklist"""
     if len(task_manager.tasklist) == 0:
         print("There is nothing in the tasklist...", style="info")
-    tasks_table = Table(title="Tasklist")
+    tasks_table = Table(title="Tasklist", show_lines=True)
     tasks_table.add_column("ID")
     tasks_table.add_column("Name")
     tasks_table.add_column("Status")
@@ -140,13 +121,13 @@ def display_tasks_table() -> None:
 
     for task in task_manager.tasklist:
         task_priority_color = priority_colors[
-            task["priority"]
+            task.priority
         ]  # if show_priority_colors is enabled in settings
         tasks_table.add_row(
-            str(task["id"]),
-            task["name"],
-            task["status"],
-            f"[{task_priority_color}]{task['priority']}[/{task_priority_color}]",
+            str(task.id),
+            task.name,
+            task.status,
+            f"[{task_priority_color}]{task.priority}[/{task_priority_color}]",
         )
     print("")
     print(tasks_table)
