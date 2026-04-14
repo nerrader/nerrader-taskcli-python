@@ -1,0 +1,195 @@
+from taskcli import storage
+from taskcli import tasks
+
+from dataclasses import dataclass, asdict, fields
+import questionary
+from typing import Any
+
+
+@dataclass
+class BehaviourConfig:
+    auto_clear_done_tasks: bool
+    confirm_on_clear: bool
+    confirm_on_delete: bool
+    show_table_lines: bool
+    show_priority_colors: bool
+    verbose_mode: bool
+
+    def __setattr__(self, name, value):
+        """This makes sure that every value in this class is a boolean, as any other data type is invalid."""
+        if name not in [field.name for field in fields(BehaviourConfig)]:
+            raise TypeError(f"'{name}' is not a valid property name")
+        if not isinstance(value, bool):
+            raise TypeError(
+                f"Invalid value: '{value}'. Behaviour Settings can only be set to a boolean value (True/False)"
+            )
+        object.__setattr__(self, name, value)
+
+
+class Config:
+    # These are the valid values for the visible_columns setting, it is a list of these values most of the time.
+    VALID_VISIBLE_COLUMNS: tuple[str] = ("ID", "Name", "Status", "Priority", "Duedate")
+    DEFAULT_CONFIG: dict[str, Any] = {
+        "visible_columns": ["ID", "Name", "Status", "Priority", "Duedate"],
+        "default_priority": "medium",
+        "behaviour_settings": {
+            "auto_clear_done_tasks": False,
+            "confirm_on_clear": True,
+            "confirm_on_delete": False,
+            "show_table_lines": True,
+            "show_priority_colors": True,
+            "verbose_mode": False,
+        },
+    }
+
+    def __init__(self):
+        data = storage.json_io(storage.CONFIG_FILEPATH)
+
+        self._visible_columns: list[str] = data["visible_columns"]
+        self._default_priority: str = data["default_priority"]
+        self._behaviour_settings: BehaviourConfig = BehaviourConfig(
+            *data["behaviour_settings"].values()
+        )
+
+    @property
+    def visible_columns(self):
+        return self._visible_columns
+
+    @visible_columns.setter
+    def visible_columns(self, new_visible_columns_list: list[str]):
+        if (
+            not isinstance(new_visible_columns_list, list)
+            or len(new_visible_columns_list) <= 0
+        ):
+            raise TypeError("The new visible columns settings have nothing.")
+        # if there is an item in the visible columns list that is not in the valid_visible_columns constant defined in the class
+        invalid_column = next(
+            (
+                column
+                for column in new_visible_columns_list
+                if column not in self.VALID_VISIBLE_COLUMNS
+            ),
+            None,
+        )
+        if invalid_column:
+            raise TypeError(
+                f"There is an invalid item in the visible columns config list: '{invalid_column}'"
+            )
+        self._visible_columns = new_visible_columns_list
+
+    @property
+    def default_priority(self):
+        return self._default_priority
+
+    @default_priority.setter
+    def default_priority(self, new_default: str):
+        if (
+            not isinstance(new_default, str)
+            or new_default not in tasks.Task.VALID_PRIORITIES
+        ):
+            raise TypeError(
+                f"The new default priority value is not valid: {new_default}"
+            )
+        self._default_priority = new_default
+
+    @property
+    def behaviour_settings(self):
+        return self._behaviour_settings
+
+    def save_config(self):
+        data = {
+            "visible_columns": self._visible_columns,
+            "default_priority": self._default_priority,
+            "behaviour_settings": asdict(self._behaviour_settings),
+        }
+        storage.json_io(storage.CONFIG_FILEPATH, data)
+
+    def _configure_table_column_visibility(self) -> None:
+        """
+        NOTE: THIS FUNCTION SHOULD ONLY BE CALLED IN main_configuration_ui()
+
+        asks the user for which columns should be visible during the list_tasks() using a questionary.checkbox
+        prompt, then saves that result directly in self.visible_columnss
+        """
+        self.visible_columns = questionary.checkbox(
+            "What columns do you want enabled when tasks are being listed?",
+            choices=(
+                questionary.Choice(title="ID", checked="ID" in self.visible_columns),
+                questionary.Choice(
+                    title="Name", checked="Name" in self.visible_columns
+                ),
+                questionary.Choice(
+                    title="Status", checked="Status" in self.visible_columns
+                ),
+                questionary.Choice(
+                    title="Priority", checked="Priority" in self.visible_columns
+                ),
+            ),
+        ).ask()
+
+    def _configre_default_priority(self) -> None:
+        self.default_priority = questionary.select(
+            "What should be your new default priority when creating tasks?",
+            choices=("low", "medium", "high", "urgent"),
+        ).ask()
+
+    def _configure_behaviour_settings(self) -> None:
+        behaviour_setting_names = [
+            setting
+            for setting in (field.name for field in fields(self.behaviour_settings))
+        ]
+
+        behaviour_setting_selection = questionary.checkbox(
+            "Behaviour Settings:",
+            choices=[
+                questionary.Choice(
+                    # turns all words capitalized, and replaces "_" with spaces
+                    title=setting.replace("_", " ").title(),
+                    value=setting,
+                    checked=getattr(self.behaviour_settings, setting),
+                )
+                for setting in behaviour_setting_names
+            ],
+        ).ask()
+
+        if behaviour_setting_selection is None:
+            return
+
+        for behaviour_setting in behaviour_setting_names:
+            if behaviour_setting in behaviour_setting_selection:
+                setattr(self.behaviour_settings, behaviour_setting, True)
+                continue
+            setattr(self.behaviour_settings, behaviour_setting, False)
+
+    def main_configuration_ui(self) -> None:
+        # why dont you make a new_config variable?
+        # well because if i cancel, the config wouldnt save anyway, and unless i decided to
+        # make this app persistent, it will never save between sessions unless you save it first
+        while True:
+            main_selection = questionary.select(
+                "Which setting do you want to configure?",
+                choices=(
+                    "Table Column Visibility",
+                    "Default Task Priority",
+                    "Other Behaviour Settings",
+                    questionary.Separator(),
+                    "Exit and Save",
+                    "Set Defaults",
+                    "Cancel All Changes",
+                ),
+            ).ask()
+
+            match main_selection:
+                case "Table Column Visibility":
+                    self._configure_table_column_visibility()
+                case "Default Task Priority":
+                    self._configre_default_priority()
+                case "Other Behaviour Settings":
+                    self._configure_behaviour_settings()
+                case "Exit and Save":
+                    self.save_config()
+                    return
+                case "Set Defaults":
+                    self = self.DEFAULT_CONFIG
+                case "Cancel All Changes":
+                    return

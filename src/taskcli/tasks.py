@@ -1,4 +1,5 @@
 from taskcli import storage
+from taskcli import config
 from typing import Any
 from dataclasses import dataclass
 
@@ -7,15 +8,20 @@ class Task:
     """The task class, created when adding a task (for now it just immediately converts it to a dict though)"""
 
     VALID_PRIORITIES: tuple[str, str, str, str] = ("low", "medium", "high", "urgent")
-    VALID_STATUSES: tuple[str, str] = ("todo", "done")
+    VALID_STATUSES: tuple[str, str] = ("on-hold", "todo", "doing", "done")
 
+    # function rehydrate_loaded_tasks is the reason why we cant just remove the status from here
     def __init__(
-        self, next_id: int, name: str, status: str = "todo", priority: str = "medium"
+        self,
+        next_id: int,
+        name: str,
+        priority: str,
+        status: str,
     ) -> None:
         self._id = next_id
         self.name = name
-        self.status = status
-        self.priority = priority
+        self._status = status
+        self._priority = priority
 
     def to_dict(self) -> dict[str, Any]:
         """Turns the Task class object into a dictionary
@@ -26,8 +32,8 @@ class Task:
         return {
             "id": self._id,
             "name": self.name,
-            "status": self.status,
-            "priority": self.priority,
+            "status": self._status,
+            "priority": self._priority,
         }
 
     @property
@@ -78,18 +84,29 @@ class ResultManager:
 
 class TasklistManager:
     def __init__(self) -> None:
-        storage.check_storage()
         data = storage.json_io(storage.TASKS_FILEPATH)
-        self.tasklist: list[dict[str, Any]] = data["tasklist"]
+
+        self.tasklist: list[Task] = data["tasklist"]
         self.rehydrate_loaded_tasks()
         self._next_id: int = data["next_id"]
+
+    @property
+    def next_id(self):
+        return self._next_id
+
+    def increment_id(self):
+        self._next_id += 1
+
+    def reset_next_id(self) -> None:
+        """Should only be done in clear_tasklist()"""
+        self._next_id = 1
 
     def find_target_task(self, target_id: int) -> dict[str, Any] | None:
         """Finds the target task according to the target id passed as an argument,
         then sends the entire dictionary of the task with that ID"""
         return next((task for task in self.tasklist if task.id == target_id), None)
 
-    def add_task(self, name: str, priority: str) -> ResultManager:
+    def add_task(self, name: str, priority: str = None, status=None) -> ResultManager:
         """Adds a task to the tasklist, where the name and the priority provided will be the
         attribute values for the task.
 
@@ -97,15 +114,22 @@ class TasklistManager:
             ResultManager: The message that will be printed in the terminal in main.py
         """
         try:
-            new_task = Task(self._next_id, name, priority=priority)
+            # if no priority, set priority to default
+            if not priority:
+                configs = config.Config()
+                priority = configs.default_priority
+            if not status:
+                status = "todo"
+            new_task: Task = Task(self.next_id, name, priority=priority, status=status)
             self.tasklist.append(new_task)
-            self._next_id += 1
+            self.increment_id()
             self.save_tasks()
             return ResultManager(
                 True,
                 f"Successfully added task '{name}' with priority '{priority}' with ID {new_task.id}",
             )
         except ValueError as error:
+            # this valueerror only occurs if its an invalid priority or something, raised in task class setters
             error_message = str(error)
             return ResultManager(False, error_message)
 
@@ -126,7 +150,7 @@ class TasklistManager:
         self.save_tasks()
         return ResultManager(True, f"Successfully deleted task with ID {task_id}")
 
-    def VALIDate_update_contents(
+    def _validate_update_contents(
         self,
         update_contents: dict[str, Any],
     ) -> ResultManager:
@@ -162,7 +186,7 @@ class TasklistManager:
         self, task_id: int, updated_contents: dict[str, Any]
     ) -> ResultManager:
         """Updates tasks given the task_id and the updated_contents, updated_contents will be
-        put through the helper function VALIDate_update_contents(), to help validate and get rid of
+        put through the helper function _validate_update_contents(), to help validate and get rid of
         unneccessary things in the updated_contents.
 
         Args:
@@ -179,7 +203,7 @@ class TasklistManager:
             return ResultManager(False, f"Could not find task with ID {task_id}")
 
         # checks if the update contents are valid
-        results = self.VALIDate_update_contents(updated_contents)
+        results = self._validate_update_contents(updated_contents)
         if not results.success:
             return ResultManager(
                 False, f"The updated contents were not valid: {results.message}"
@@ -217,7 +241,7 @@ class TasklistManager:
 
     def clear_tasklist(self) -> ResultManager:
         self.tasklist = []
-        self._next_id = 1
+        self.reset_next_id()
         self.save_tasks()
         return ResultManager(True, "Successfully cleared all tasks in tasklist!")
 
@@ -228,7 +252,7 @@ class TasklistManager:
         """
         # this will replace the dictionaries with task class objects
         self.tasklist = [
-            Task(task["id"], task["name"], task["status"], task["priority"])
+            Task(task["id"], task["name"], task["priority"], task["status"])
             for task in self.tasklist
         ]
 
@@ -240,5 +264,5 @@ class TasklistManager:
         saved_tasklist = [task.to_dict() for task in self.tasklist]
         storage.json_io(
             storage.TASKS_FILEPATH,
-            {"next_id": self._next_id, "tasklist": saved_tasklist},
+            {"next_id": self.next_id, "tasklist": saved_tasklist},
         )

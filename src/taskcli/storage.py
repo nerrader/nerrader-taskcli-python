@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from os import makedirs, getenv
 from typing import Any
+from taskcli import config
 
 # Just know that config is not implemented yet!
 MAIN_FILEPATH: Path = (
@@ -10,7 +11,6 @@ MAIN_FILEPATH: Path = (
 CONFIG_FILEPATH: Path = MAIN_FILEPATH / "config.json"
 TASKS_FILEPATH: Path = MAIN_FILEPATH / "tasks.json"
 DEFAULT_TASKS: dict[str, Any] = {"next_id": 1, "tasklist": []}
-DEFAULT_CONFIG: dict[str, Any] = {}
 
 
 def json_io(filepath: Path, data: Any = None) -> Any:
@@ -48,7 +48,7 @@ def check_storage() -> None:
     if not TASKS_FILEPATH.exists():
         json_io(TASKS_FILEPATH, DEFAULT_TASKS)
     if not CONFIG_FILEPATH.exists():
-        json_io(CONFIG_FILEPATH, DEFAULT_CONFIG)
+        json_io(CONFIG_FILEPATH, config.Config.DEFAULT_CONFIG)
 
 
 def main():
