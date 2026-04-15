@@ -3,7 +3,7 @@ from taskcli import tasks
 from rich.theme import Theme
 from rich.console import Console
 from rich.table import Table
-from typing import Annotated
+from typing import Annotated, Optional
 from typer_extensions import ExtendedTyper
 import questionary
 from taskcli import storage
@@ -30,10 +30,12 @@ def add_task(
     context: typer.Context,
     name: Annotated[list[str], typer.Argument(help="The name of the task")],
     priority: Annotated[
-        str, typer.Option("--priority", "-p", help="The priority of the created task")
+        Optional[str],
+        typer.Option("--priority", "-p", help="The priority of the created task"),
     ] = None,  # let the add_task() get the default priority later
     status: Annotated[
-        str, typer.Option("--status", "-s", help="The status of the created task")
+        Optional[str],
+        typer.Option("--status", "-s", help="The status of the created task"),
     ] = None,  # the __init__ in task class will automatically add a default value
 ) -> None:
     """Adds a task to the tasklist with the args being the values of the attributes for the task.
@@ -44,8 +46,9 @@ def add_task(
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
-    name = (" ".join(name)).strip()
-    results = state.task_manager.add_task(name, priority, status)
+    # to override the old list[str] so mypys happy
+    joined_name: str = (" ".join(name)).strip()
+    results = state.task_manager.add_task(joined_name, priority, status)
     print(results)
     display_tasks_table(context)
 
@@ -84,10 +87,11 @@ def update_task(
     context: typer.Context,
     task_id: int,
     updated_name: Annotated[
-        list[str] | None, typer.Option("--name", "-n", help="The updated name")
+        Optional[list[str]], typer.Option("--name", "-n", help="The updated name")
     ] = None,
     updated_priority: Annotated[
-        str | None, typer.Option("--priority", "-p", help="The updated priority")
+        Optional[str] | None,
+        typer.Option("--priority", "-p", help="The updated priority"),
     ] = None,
 ) -> None:
     """Updates a specific task given the task id by the user.
@@ -154,7 +158,7 @@ def display_tasks_table(context: typer.Context) -> None:
         "low": "green",
         "medium": "yellow",
         "high": "red",
-        "urgent": "bold red",
+        "urgent": "bold red3",
     }
 
     for task in state.task_manager.tasklist:
@@ -175,13 +179,12 @@ def display_tasks_table(context: typer.Context) -> None:
         task_priority_color = "white"
         if state.config.behaviour_settings.show_priority_colors:
             task_priority_color = priority_colors[task.priority]
-
         visible_task_contents: list[str] = []
         task_attribute_map = {
             "ID": str(task.id),
             "Name": task.name,
             "Status": task.status,
-            "Priority": f"[{task_priority_color}]{task.priority}[/{task_priority_color}]",
+            "Priority": f"[{task_priority_color}]{task.priority}[/]",
         }
         for column_name in state.config.visible_columns:
             visible_task_contents.append(task_attribute_map[column_name])

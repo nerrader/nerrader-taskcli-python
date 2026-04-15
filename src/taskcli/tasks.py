@@ -1,6 +1,6 @@
 from taskcli import storage
 from taskcli import config
-from typing import Any
+from typing import Any, Optional
 from dataclasses import dataclass
 
 
@@ -8,7 +8,7 @@ class Task:
     """The task class, created when adding a task (for now it just immediately converts it to a dict though)"""
 
     VALID_PRIORITIES: tuple[str, str, str, str] = ("low", "medium", "high", "urgent")
-    VALID_STATUSES: tuple[str, str] = ("on-hold", "todo", "doing", "done")
+    VALID_STATUSES: tuple[str, str, str, str] = ("on-hold", "todo", "doing", "done")
 
     # function rehydrate_loaded_tasks is the reason why we cant just remove the status from here
     def __init__(
@@ -86,8 +86,10 @@ class TasklistManager:
     def __init__(self) -> None:
         data = storage.json_io(storage.TASKS_FILEPATH)
 
-        self.tasklist: list[Task] = data["tasklist"]
-        self.rehydrate_loaded_tasks()
+        self.old_tasklist: list[dict[str, Any]] = data["tasklist"]
+
+        # rehydrating the python dictionaries into classes
+        self.tasklist = self._rehydrate_loaded_tasks()
         self._next_id: int = data["next_id"]
 
     @property
@@ -101,12 +103,14 @@ class TasklistManager:
         """Should only be done in clear_tasklist()"""
         self._next_id = 1
 
-    def find_target_task(self, target_id: int) -> dict[str, Any] | None:
+    def find_target_task(self, target_id: int) -> Task | None:
         """Finds the target task according to the target id passed as an argument,
         then sends the entire dictionary of the task with that ID"""
         return next((task for task in self.tasklist if task.id == target_id), None)
 
-    def add_task(self, name: str, priority: str = None, status=None) -> ResultManager:
+    def add_task(
+        self, name: str, priority: Optional[str] = None, status: Optional[str] = None
+    ) -> ResultManager:
         """Adds a task to the tasklist, where the name and the priority provided will be the
         attribute values for the task.
 
@@ -246,15 +250,25 @@ class TasklistManager:
         return ResultManager(True, "Successfully cleared all tasks in tasklist!")
 
     # make it a docstring later, so basically it rehydrates those dictionaries into classes
-    def rehydrate_loaded_tasks(self) -> None:
-        """Rehydrates and turns the loaded tasks from the tasklist.json into classes, as you cannot
-        save python classes into a .json file.
+    def _rehydrate_loaded_tasks(self) -> list[Task]:
+        """
+        NOTE: THIS SHOULD ONLY BE USED IN THE __init__ FUNCTION OF TASK MANAGER CLASS
+
+        Rehydrates and turns the loaded tasks from the tasklist.json into Task classes, as you cannot
+        save python classes into a .json file. Therefore, when you load the file, what comes out is a python
+        dictionary
         """
         # this will replace the dictionaries with task class objects
-        self.tasklist = [
-            Task(task["id"], task["name"], task["priority"], task["status"])
-            for task in self.tasklist
+        rehydrated_tasklist = [
+            Task(
+                task["id"],
+                task["name"],
+                priority=task["priority"],
+                status=task["status"],
+            )
+            for task in self.old_tasklist
         ]
+        return rehydrated_tasklist
 
     def save_tasks(self) -> None:
         """Turns all the tasks into a dictionary, then saves all the tasks in storage.TASKS_FILEPATH

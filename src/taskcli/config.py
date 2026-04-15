@@ -17,6 +17,7 @@ class BehaviourConfig:
 
     def __setattr__(self, name, value):
         """This makes sure that every value in this class is a boolean, as any other data type is invalid."""
+
         if name not in [field.name for field in fields(BehaviourConfig)]:
             raise TypeError(f"'{name}' is not a valid property name")
         if not isinstance(value, bool):
@@ -28,9 +29,15 @@ class BehaviourConfig:
 
 class Config:
     # These are the valid values for the visible_columns setting, it is a list of these values most of the time.
-    VALID_VISIBLE_COLUMNS: tuple[str] = ("ID", "Name", "Status", "Priority", "Duedate")
+    VALID_VISIBLE_COLUMNS: tuple[str, str, str, str, str] = (
+        "ID",
+        "Name",
+        "Status",
+        "Priority",
+        "Duedate",
+    )
     DEFAULT_CONFIG: dict[str, Any] = {
-        "visible_columns": ["ID", "Name", "Status", "Priority", "Duedate"],
+        "visible_columns": ["ID", "Name", "Status", "Priority"],
         "default_priority": "medium",
         "behaviour_settings": {
             "auto_clear_done_tasks": False,
@@ -96,6 +103,7 @@ class Config:
     def behaviour_settings(self):
         return self._behaviour_settings
 
+    # pretty self explanatory i think
     def save_config(self):
         data = {
             "visible_columns": self._visible_columns,
@@ -111,29 +119,40 @@ class Config:
         asks the user for which columns should be visible during the list_tasks() using a questionary.checkbox
         prompt, then saves that result directly in self.visible_columnss
         """
-        self.visible_columns = questionary.checkbox(
+        new_visible_columns = questionary.checkbox(
             "What columns do you want enabled when tasks are being listed?",
-            choices=(
-                questionary.Choice(title="ID", checked="ID" in self.visible_columns),
+            choices=[
                 questionary.Choice(
-                    title="Name", checked="Name" in self.visible_columns
-                ),
-                questionary.Choice(
-                    title="Status", checked="Status" in self.visible_columns
-                ),
-                questionary.Choice(
-                    title="Priority", checked="Priority" in self.visible_columns
-                ),
-            ),
+                    title=column_name, checked=column_name in self.visible_columns
+                )
+                for column_name in self.VALID_VISIBLE_COLUMNS
+            ],
         ).ask()
+        # to check if the user did a ctrl + c, and to stop it being overriden if so
+        if new_visible_columns:
+            self.visible_columns = new_visible_columns
+        return
 
     def _configre_default_priority(self) -> None:
-        self.default_priority = questionary.select(
+        """NOTE: THIS SHOULD ONLY BE USED ON main_configuration_ui()
+
+        Configures the default priority using a questionary.select() prompt
+        """
+        new_default_priority = questionary.select(
             "What should be your new default priority when creating tasks?",
             choices=("low", "medium", "high", "urgent"),
         ).ask()
 
+        # checks for ctrl + c, because it returns none if it got cancelled
+        if new_default_priority:
+            self.default_priority = new_default_priority
+        return
+
     def _configure_behaviour_settings(self) -> None:
+        """NOTE: THIS SHOULD ONLY BE USED ON main_configuration_ui()
+
+        Configures the behaviour settings using questionary.checkbox()
+        """
         behaviour_setting_names = [
             setting
             for setting in (field.name for field in fields(self.behaviour_settings))
@@ -152,6 +171,7 @@ class Config:
             ],
         ).ask()
 
+        # check for ctrl c cancels
         if behaviour_setting_selection is None:
             return
 
@@ -161,7 +181,22 @@ class Config:
                 continue
             setattr(self.behaviour_settings, behaviour_setting, False)
 
+    def reset_defaults(self):
+        defaults = self.DEFAULT_CONFIG
+        self.visible_columns: list[str] = defaults["visible_columns"]
+        self.default_priority: str = defaults["default_priority"]
+        for behaviour_setting in [
+            setting
+            for setting in (field.name for field in fields(self.behaviour_settings))
+        ]:  # behaviour setting names
+            setattr(
+                self.behaviour_settings,
+                behaviour_setting,
+                defaults["behaviour_settings"][behaviour_setting],
+            )
+
     def main_configuration_ui(self) -> None:
+        """pretty self explanatory, it creates the main configuration ui"""
         # why dont you make a new_config variable?
         # well because if i cancel, the config wouldnt save anyway, and unless i decided to
         # make this app persistent, it will never save between sessions unless you save it first
@@ -190,6 +225,6 @@ class Config:
                     self.save_config()
                     return
                 case "Set Defaults":
-                    self = self.DEFAULT_CONFIG
+                    self.reset_defaults()
                 case "Cancel All Changes":
                     return
