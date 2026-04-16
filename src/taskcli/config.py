@@ -9,10 +9,11 @@ from typing import Any
 @dataclass
 class BehaviourConfig:
     auto_clear_done_tasks: bool
-    confirm_on_clear: bool
-    confirm_on_delete: bool
+    require_clear_confirmation: bool
+    require_delete_confirmation: bool
     show_table_lines: bool
     show_priority_colors: bool
+    show_status_colors: bool
     verbose_mode: bool
 
     def __setattr__(self, name, value):
@@ -41,15 +42,16 @@ class Config:
         "default_priority": "medium",
         "behaviour_settings": {
             "auto_clear_done_tasks": False,
-            "confirm_on_clear": True,
-            "confirm_on_delete": False,
+            "require_clear_confirmation": True,
+            "require_delete_confirmation": False,
             "show_table_lines": True,
+            "show_status_colors": True,
             "show_priority_colors": True,
             "verbose_mode": False,
         },
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         data = storage.json_io(storage.CONFIG_FILEPATH)
 
         self._visible_columns: list[str] = data["visible_columns"]
@@ -181,7 +183,11 @@ class Config:
                 continue
             setattr(self.behaviour_settings, behaviour_setting, False)
 
-    def reset_defaults(self):
+    def reset_defaults(self) -> None:
+        """
+        NOTE: meant to be used in main_configuration_ui(), but maybe can be used somewhere else.
+        name is self explanatory i think
+        """
         defaults = self.DEFAULT_CONFIG
         self.visible_columns: list[str] = defaults["visible_columns"]
         self.default_priority: str = defaults["default_priority"]

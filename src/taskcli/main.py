@@ -23,6 +23,7 @@ app = ExtendedTyper()
 class ContextObject:
     task_manager: tasks.TasklistManager
     config: config.Config
+    verbose_mode: bool
 
 
 @app.command("add")
@@ -70,7 +71,10 @@ def delete_task(
 
     confirm_delete = (
         questionary.confirm(f"Are you sure you want to delete task ID {task_id}")
-        .skip_if(not state.config.behaviour_settings.confirm_on_delete, default=True)
+        .skip_if(
+            not state.config.behaviour_settings.require_delete_confirmation,
+            default=True,
+        )
         .ask()
     )
     if not confirm_delete:
@@ -90,7 +94,7 @@ def update_task(
         Optional[list[str]], typer.Option("--name", "-n", help="The updated name")
     ] = None,
     updated_priority: Annotated[
-        Optional[str] | None,
+        Optional[str],
         typer.Option("--priority", "-p", help="The updated priority"),
     ] = None,
 ) -> None:
@@ -108,8 +112,9 @@ def update_task(
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
+    joined_updated_name: str | None = " ".join(updated_name) if updated_name else None
     raw_updated_contents = {
-        "name": (" ".join(updated_name)) if updated_name else None,
+        "name": joined_updated_name,
         "priority": updated_priority,
     }
     # it will validate it
@@ -154,45 +159,43 @@ def display_tasks_table(context: typer.Context) -> None:
     for column_name in state.config.visible_columns:
         tasks_table.add_column(column_name)
 
-    priority_colors = {
+    priority_colors: dict[str, str] = {
         "low": "green",
         "medium": "yellow",
         "high": "red",
         "urgent": "bold red3",
     }
-
+    status_colors: dict[str, str] = {
+        "on-hold": "dim",
+        "todo": "white",
+        "doing": "bold blue",
+        "done": "green4",
+    }
     for task in state.task_manager.tasklist:
-        # this is for auto clear done tasks setting, put it somewhere else
-        if (
-            state.config.behaviour_settings.auto_clear_done_tasks
-            and task.status == "done"
-        ):
-            state.task_manager.delete_task(task.id)
-            continue
-
-        if state.config.behaviour_settings.auto_clear_done_tasks:
-            state.task_manager.tasklist = [
-                task for task in state.task_manager.tasklist if task.status != "done"
-            ]
-
-            # this is for the show priority colors setting
-        task_priority_color = "white"
+        # this is for the show priority colors setting
+        task_priority_color: str = "white"
         if state.config.behaviour_settings.show_priority_colors:
             task_priority_color = priority_colors[task.priority]
+
+        # for the show status colors setting
+        task_status_color = "white"
+        if state.config.behaviour_settings.show_status_colors:
+            task_status_color = status_colors[task.status]
+
         visible_task_contents: list[str] = []
+
         task_attribute_map = {
             "ID": str(task.id),
             "Name": task.name,
-            "Status": task.status,
+            "Status": f"[{task_status_color}]{task.status}[/]",
             "Priority": f"[{task_priority_color}]{task.priority}[/]",
         }
+
         for column_name in state.config.visible_columns:
             visible_task_contents.append(task_attribute_map[column_name])
         tasks_table.add_row(*visible_task_contents)
 
-    print("")
-    print(tasks_table)
-    print("")
+    print("\n", tasks_table, "\n")
     # newlines to make it look better
 
 
@@ -203,14 +206,23 @@ def list_tasks(context: typer.Context) -> None:
 
 
 @app.command("clear")
-def clear_tasks(context: typer.Context) -> None:
+def clear_tasks(
+    context: typer.Context,
+    confirm: Annotated[
+        Optional[bool],
+        typer.Option("--confirm", "-c", help="Skips the confirmation prompt"),
+    ] = False,
+) -> None:
     """Asks a confirmation prompt first, then if they confirm, clear the tasklist"""
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
     confirm_clear: bool = (
         questionary.confirm("Are you sure you want to clear the entire tasklist?")
-        .skip_if(not state.config.behaviour_settings.confirm_on_clear, True)
+        .skip_if(
+            not state.config.behaviour_settings.require_clear_confirmation or confirm,
+            True,
+        )
         .ask()
     )
     if not confirm_clear:
@@ -220,30 +232,55 @@ def clear_tasks(context: typer.Context) -> None:
 
 
 @app.command("config")
-def config_cli(context: typer.Context):
+def config_cli(context: typer.Context) -> None:
     state: ContextObject = context.obj
 
     state.config.main_configuration_ui()
 
 
 @app.callback()
-def initialize(context: typer.Context):
-    """basically this is the first thing that runs when app() is called
-    we first check storage to generate the files and stuff if they dont exist, then
-    we create a context.obj to store the variables in
+def initialize(
+    context: typer.Context,
+    verbose: Annotated[
+        Optional[bool],
+        typer.Option(
+            "-v", "--verbose", help="This flag enables verbose mode", expose_value=False
+        ),
+    ] = False,
+) -> None:
+    # basically this is the first thing that runs when app() is called
+    # we first check storage to generate the files and stuff if they dont exist, then
+    # we create a context.obj to store the variables in
 
-    Args:
-        context (typer.Context): Context object used by typer. You must use context.obj to store persistent values.
-    """
+    # Args:
+    #     context (typer.Context): Context object used by typer. You must use context.obj to store persistent values.
+    #
     storage.check_storage()
-    context.obj = ContextObject(tasks.TasklistManager(), config.Config())
+    task_manager: tasks.TasklistManager = tasks.TasklistManager()
+    context_config: config.Config = config.Config()
+    final_verbose_mode: bool = context_config.behaviour_settings.verbose_mode or verbose
+
+    # where else am i supposed to put it
+    if context_config.behaviour_settings.auto_clear_done_tasks:
+        task_manager.tasklist = [
+            task for task in task_manager.tasklist if task.status != "done"
+        ]
+        task_manager.save_tasks()
+
+    context.obj = ContextObject(task_manager, context_config, final_verbose_mode)
 
 
 def main():
-    app()
+    try:
+        app()
+    except Exception as e:
+        print(str(e))
 
 
 if __name__ == "__main__":
     main()
 
-# crud operations, saving and loading
+# add duedates and make verbose mode work and also list filtering when listing tasks (release taskcli revamp after)
+# make it so that you can change between tasklists (branches pretty much)
+# add tags and task groups
+# undo redo
