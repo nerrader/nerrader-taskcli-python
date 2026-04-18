@@ -1,16 +1,21 @@
+from glob import glob
 import json
+import os
 from pathlib import Path
-from os import makedirs, getenv
 from typing import Any
+
+from loguru import logger
+
 from taskcli import config
 
-# Just know that config is not implemented yet!
 MAIN_FILEPATH: Path = (
-    Path(getenv("APPDATA", Path.home() / "AppData" / "Roaming")) / "taskcli"
+    Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming")) / "taskcli"
 )
 CONFIG_FILEPATH: Path = MAIN_FILEPATH / "config.json"
 TASKS_FILEPATH: Path = MAIN_FILEPATH / "tasks.json"
 DEFAULT_TASKS: dict[str, Any] = {"next_id": 1, "tasklist": []}
+
+# This file is for anything related to reading and writing to files in the main filepath
 
 
 def json_io(filepath: Path, data: Any = None) -> Any:
@@ -41,8 +46,8 @@ def json_io(filepath: Path, data: Any = None) -> Any:
 def check_storage() -> None:
     """checks if the files exist, if not it creates them and fills them with default data"""
 
-    # make the main directory if it doesn't exist
-    makedirs(MAIN_FILEPATH, exist_ok=True)
+    # make the main directory and logs directory in the appdata if it doesn't exist
+    os.makedirs(MAIN_FILEPATH, exist_ok=True)
 
     # check if the files exist, if not create them and fill them with default data
     if not TASKS_FILEPATH.exists():
@@ -51,9 +56,11 @@ def check_storage() -> None:
         json_io(CONFIG_FILEPATH, config.Config.DEFAULT_CONFIG)
 
 
-def main():
-    check_storage()
-
-
-if __name__ == "__main__":
-    main()
+def reset_files() -> None:
+    files_to_reset = glob(os.path.join(MAIN_FILEPATH, "*.json"))
+    if len(files_to_reset) <= 0:
+        print("There was nothing to reset.")
+    for file in files_to_reset:
+        os.remove(file)
+        logger.info(f"Deleted {file}")
+    logger.success("Successfully resetted tasklist and settings")

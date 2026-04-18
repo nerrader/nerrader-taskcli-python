@@ -1,21 +1,29 @@
-import typer
-from taskcli import tasks
+from dataclasses import dataclass
+import sys  # we import sys for stderr for loguru specifically
+from typing import Annotated, Optional
+
+from loguru import logger  # for logging
+import questionary  # for cli prompts (confirm/selection/checkbox)
+
+# rich things, for themes colors and tables
 from rich.theme import Theme
 from rich.console import Console
 from rich.table import Table
-from typing import Annotated, Optional
+
+# typer things
+import typer
 from typer_extensions import ExtendedTyper
-import questionary
+
+# other taskcli files, local to project
+from taskcli import tasks
 from taskcli import storage
 from taskcli import config
-from dataclasses import dataclass
 
 CUSTOM_THEME = Theme(
     {"error": "red", "success": "green", "info": "blue", "warning": "yellow"}
 )
 CONSOLE = Console(theme=CUSTOM_THEME)
 print = CONSOLE.print
-
 app = ExtendedTyper()
 
 
@@ -26,6 +34,28 @@ class ContextObject:
     verbose_mode: bool
 
 
+@logger.catch(level="ERROR")
+def handleResults(result: tasks.ResultManager) -> None:
+    """Logs and prints the results, automatically determines level depending on the success value.
+
+    Args:
+        result (tasks.ResultManager): The results given by a function from tasks.py being handled.
+
+    Raises:
+        ValueError: If results were empty or if no results were given, raise this.
+    """
+    if not result:
+        raise ValueError("No results found in the handleResults() function.")
+    print(result)
+
+    log = logger.bind(data=result.data)
+    if result.success:
+        log.success(result.message)
+    else:
+        log.error(result.message)
+
+
+@logger.catch(level="ERROR")
 @app.command("add")
 def add_task(
     context: typer.Context,
@@ -44,16 +74,24 @@ def add_task(
     Raises:
         typer.BadParameter: If the priority provided by the user is not a valid priority, raise this error.
     """
+    logger.info(
+        "User invoked add command",
+    )
+    logger.debug(command_params={"name": name, "priority": priority, "status": status})
+
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
     # to override the old list[str] so mypys happy
     joined_name: str = (" ".join(name)).strip()
+
+    # the add_task function will deal with the missing values themselves
     results = state.task_manager.add_task(joined_name, priority, status)
-    print(results)
+    handleResults(results)
     display_tasks_table(context)
 
 
+@logger.catch(level="ERROR")
 @app.command_with_aliases("delete", aliases=["remove", "del", "rm"])
 def delete_task(
     context: typer.Context,
@@ -82,10 +120,11 @@ def delete_task(
         return
 
     results = state.task_manager.delete_task(task_id)
-    print(results)
+    handleResults(results)
     display_tasks_table(context)
 
 
+@logger.catch(level="ERROR")
 @app.command("update")
 def update_task(
     context: typer.Context,
@@ -102,12 +141,8 @@ def update_task(
 
     Args:
         task_id (int): The task ID of the task that the user wants to update.
-        updated_name (str|None): The updated name given by the user. Defaults to None.
-        updated_priority (str|None): The updated priority given by the user. Defaults to None.
-
-    Raises:
-        typer.BadParameter: The user did not enter a valid priority
-        typer.BadParameter (x2): The user did not have a name nor priority attribute to update.
+        updated_name (Optional[str]): The updated name given by the user. Defaults to None.
+        updated_priority (Optional[str]): The updated priority given by the user. Defaults to None.
     """
     # literally just for the autocomplete really
     state: ContextObject = context.obj
@@ -117,12 +152,13 @@ def update_task(
         "name": joined_updated_name,
         "priority": updated_priority,
     }
-    # it will validate it
+
     results = state.task_manager.update_task(task_id, raw_updated_contents)
-    print(results)
+    handleResults(results)
     display_tasks_table(context)
 
 
+@logger.catch(level="ERROR")
 @app.command("mark")
 def mark_task(
     context: typer.Context,
@@ -141,7 +177,7 @@ def mark_task(
             f"Invalid status: '{updated_status}'. Must be one of {tasks.Task.VALID_STATUSES}"
         )
     results = state.task_manager.mark_task(task_id, updated_status)
-    print(results)
+    handleResults(results)
     display_tasks_table(context)
 
 
@@ -155,6 +191,13 @@ def display_tasks_table(context: typer.Context) -> None:
     tasks_table = Table(
         title="Tasklist", show_lines=state.config.behaviour_settings.show_table_lines
     )
+
+    # where else am i supposed to put it
+    if state.config.behaviour_settings.auto_clear_done_tasks:
+        state.task_manager.tasklist = [
+            task for task in state.task_manager.tasklist if task.status != "done"
+        ]
+        state.task_manager.save_tasks()
 
     for column_name in state.config.visible_columns:
         tasks_table.add_column(column_name)
@@ -171,6 +214,7 @@ def display_tasks_table(context: typer.Context) -> None:
         "doing": "bold blue",
         "done": "green4",
     }
+
     for task in state.task_manager.tasklist:
         # this is for the show priority colors setting
         task_priority_color: str = "white"
@@ -199,12 +243,14 @@ def display_tasks_table(context: typer.Context) -> None:
     # newlines to make it look better
 
 
+@logger.catch(level="ERROR")
 @app.command_with_aliases("list", aliases=["ls", "view"])
 def list_tasks(context: typer.Context) -> None:
     """The actual CLI Command to list the rich table tasklist"""
     display_tasks_table(context)
 
 
+@logger.catch(level="ERROR")
 @app.command("clear")
 def clear_tasks(
     context: typer.Context,
@@ -226,9 +272,10 @@ def clear_tasks(
         .ask()
     )
     if not confirm_clear:
+        logger.info("Cancelled clearing of tasklist")
         return
     results = state.task_manager.clear_tasklist()
-    print(results)
+    handleResults(results)
 
 
 @app.command("config")
@@ -236,6 +283,18 @@ def config_cli(context: typer.Context) -> None:
     state: ContextObject = context.obj
 
     state.config.main_configuration_ui()
+
+
+@app.command("reset")
+def reset_files():
+    reset_confirm = questionary.confirm(
+        "Are you sure you want to reset all your tasks and configs? NOTE: This won't reset app logs."
+    ).ask()
+
+    if reset_confirm:
+        storage.reset_files()
+        print("Successfully reset files!", style="success")
+        logger.success("Successfully reset appdata files!")
 
 
 @app.callback()
@@ -251,30 +310,40 @@ def initialize(
     # basically this is the first thing that runs when app() is called
     # we first check storage to generate the files and stuff if they dont exist, then
     # we create a context.obj to store the variables in
+    # we also create a logger object thingy to actually log things
 
     # Args:
     #     context (typer.Context): Context object used by typer. You must use context.obj to store persistent values.
     #
+
+    logger.remove()
+    logger.add(
+        storage.MAIN_FILEPATH / "app.log",
+        rotation="12:00",
+        level="DEBUG",
+        format="{time:DD-MM-YYYY_HH:mm:ss} > {name}:{line} > {level}: {message} | {extra}",
+    )
+
     storage.check_storage()
     task_manager: tasks.TasklistManager = tasks.TasklistManager()
     context_config: config.Config = config.Config()
     final_verbose_mode: bool = context_config.behaviour_settings.verbose_mode or verbose
 
-    # where else am i supposed to put it
-    if context_config.behaviour_settings.auto_clear_done_tasks:
-        task_manager.tasklist = [
-            task for task in task_manager.tasklist if task.status != "done"
-        ]
-        task_manager.save_tasks()
+    if final_verbose_mode:
+        logger.add(
+            sys.stderr,
+            format="{time:DD-MM-YYYY_HH:mm:ss} > {name}:{line} > {level}: {message} | {extra}",
+            level="DEBUG",
+        )
 
     context.obj = ContextObject(task_manager, context_config, final_verbose_mode)
+    logger.info(
+        "App initialization done. Put all the variables needed in context.obj",
+    )
 
 
 def main():
-    try:
-        app()
-    except Exception as e:
-        print(str(e))
+    app()
 
 
 if __name__ == "__main__":

@@ -1,7 +1,12 @@
-from taskcli import storage
-from taskcli import config
-from typing import Any, Optional
 from dataclasses import dataclass
+from typing import Any, Optional
+
+from loguru import logger
+
+from taskcli import config
+from taskcli import storage
+
+# This file is for everything related to tasks.
 
 
 class Task:
@@ -83,6 +88,9 @@ class ResultManager:
 
 
 class TasklistManager:
+    """This class should validate the tasks parameters before putting them in the tasks class, and also
+    do some other stuff to manipulate the tasklist correctly"""
+
     def __init__(self) -> None:
         data = storage.json_io(storage.TASKS_FILEPATH)
 
@@ -98,6 +106,7 @@ class TasklistManager:
 
     def increment_id(self):
         self._next_id += 1
+        logger.debug("Incremented next ID by 1", current_next_id=self.next_id)
 
     def reset_next_id(self) -> None:
         """Should only be done in clear_tasklist()"""
@@ -120,12 +129,23 @@ class TasklistManager:
         try:
             # if no priority, set priority to default
             if not priority:
+                logger.info("No priority found in add task function.", data=priority)
                 configs = config.Config()
                 priority = configs.default_priority
+                logger.success(
+                    "Successfully set priority to default priority", data=priority
+                )
             if not status:
+                logger.info("No status found in add task function.")
                 status = "todo"
+                logger.success(
+                    "Successfully set status to 'todo' (default)", data=status
+                )
             new_task: Task = Task(self.next_id, name, priority=priority, status=status)
             self.tasklist.append(new_task)
+            logger.success(
+                "Appended new task to the tasklist", task_dict=new_task.to_dict()
+            )
             self.increment_id()
             self.save_tasks()
             return ResultManager(
@@ -268,6 +288,11 @@ class TasklistManager:
             )
             for task in self.old_tasklist
         ]
+        logger.success("Rehydrated the tasklist with new task classes")
+        logger.debug(
+            "Rehydrated tasklist",
+            rehydrated_tasklist=[task.to_dict() for task in rehydrated_tasklist],
+        )
         return rehydrated_tasklist
 
     def save_tasks(self) -> None:
@@ -280,3 +305,4 @@ class TasklistManager:
             storage.TASKS_FILEPATH,
             {"next_id": self.next_id, "tasklist": saved_tasklist},
         )
+        logger.success(f"Successfully saved tasks to {storage.TASKS_FILEPATH}")

@@ -1,9 +1,12 @@
+from dataclasses import dataclass, asdict, fields
+from typing import Any
+
+import questionary
+
 from taskcli import storage
 from taskcli import tasks
 
-from dataclasses import dataclass, asdict, fields
-import questionary
-from typing import Any
+# This file is for everything related to configs
 
 
 @dataclass
