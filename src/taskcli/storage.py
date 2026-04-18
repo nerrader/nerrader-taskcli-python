@@ -32,27 +32,34 @@ def json_io(filepath: Path, data: Any = None) -> Any:
     # reading mode
     if data is None:
         try:
+            logger.debug(f"Attemping to read JSON from {filepath}")
             with open(filepath, "r") as file:
                 file_contents = json.load(file)
         except FileNotFoundError:
             file_contents = None
+            logger.error(
+                "File was not found in the designated filepath, returning None"
+            )
         return file_contents
     # writing mode
     else:
+        logger.debug(f"Writing data to {filepath}", write_data=data)
         with open(filepath, "w") as file:
             json.dump(data, file, indent=4)
 
 
 def check_storage() -> None:
     """checks if the files exist, if not it creates them and fills them with default data"""
-
+    logger.debug("Checking storage")
     # make the main directory and logs directory in the appdata if it doesn't exist
     os.makedirs(MAIN_FILEPATH, exist_ok=True)
 
     # check if the files exist, if not create them and fill them with default data
     if not TASKS_FILEPATH.exists():
+        logger.debug("Tasklist file wasn't found, set tasks to the starting tasklist.")
         json_io(TASKS_FILEPATH, DEFAULT_TASKS)
     if not CONFIG_FILEPATH.exists():
+        logger.debug("Config file wasn't found, set configs to default")
         json_io(CONFIG_FILEPATH, config.Config.DEFAULT_CONFIG)
 
 
@@ -62,5 +69,5 @@ def reset_files() -> None:
         print("There was nothing to reset.")
     for file in files_to_reset:
         os.remove(file)
-        logger.info(f"Deleted {file}")
+        logger.debug(f"Deleted {file}")
     logger.success("Successfully resetted tasklist and settings")

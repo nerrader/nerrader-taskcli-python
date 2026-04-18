@@ -12,7 +12,6 @@ from rich.table import Table
 
 # typer things
 import typer
-from typer_extensions import ExtendedTyper
 
 # other taskcli files, local to project
 from taskcli import tasks
@@ -24,7 +23,7 @@ CUSTOM_THEME = Theme(
 )
 CONSOLE = Console(theme=CUSTOM_THEME)
 print = CONSOLE.print
-app = ExtendedTyper()
+app = typer.Typer()
 
 
 @dataclass
@@ -77,7 +76,10 @@ def add_task(
     logger.info(
         "User invoked add command",
     )
-    logger.debug(command_params={"name": name, "priority": priority, "status": status})
+    logger.debug(
+        "command_params",
+        command_params={"name": name, "priority": priority, "status": status},
+    )
 
     # literally just for the autocomplete really
     state: ContextObject = context.obj
@@ -92,7 +94,10 @@ def add_task(
 
 
 @logger.catch(level="ERROR")
-@app.command_with_aliases("delete", aliases=["remove", "del", "rm"])
+@app.command("delete")
+@app.command("remove")
+@app.command("del")
+@app.command("rm")
 def delete_task(
     context: typer.Context,
     task_id: Annotated[
@@ -104,6 +109,8 @@ def delete_task(
     Args:
         task_id (int): The task ID of the given task that the user wants to delete.
     """
+    logger.info("User invoked 'delete' command")
+    logger.debug("delete command params", command_params={"task_id": task_id})
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
@@ -144,6 +151,17 @@ def update_task(
         updated_name (Optional[str]): The updated name given by the user. Defaults to None.
         updated_priority (Optional[str]): The updated priority given by the user. Defaults to None.
     """
+    logger.info(
+        "User invoked 'update' command",
+    )
+    logger.debug(
+        "update command params",
+        command_params={
+            "task_id": task_id,
+            "updated_name": updated_name,
+            "updated_priority": updated_priority,
+        },
+    )
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
@@ -169,6 +187,14 @@ def mark_task(
         str, typer.Argument(help="The updated status of the task ID given by the user")
     ],
 ) -> None:
+    logger.info("User invoked 'mark' command")
+    logger.debug(
+        "mark command params",
+        command_params={
+            "task_id": task_id,
+            "updated_status": updated_status,
+        },
+    )
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
@@ -244,8 +270,11 @@ def display_tasks_table(context: typer.Context) -> None:
 
 
 @logger.catch(level="ERROR")
-@app.command_with_aliases("list", aliases=["ls", "view"])
+@app.command("list")
+@app.command("view")
+@app.command("ls")
 def list_tasks(context: typer.Context) -> None:
+    logger.info("User invoked 'list' command")
     """The actual CLI Command to list the rich table tasklist"""
     display_tasks_table(context)
 
@@ -261,6 +290,8 @@ def clear_tasks(
 ) -> None:
     """Asks a confirmation prompt first, then if they confirm, clear the tasklist"""
     # literally just for the autocomplete really
+    logger.info("User invoked 'clear' command")
+    logger.debug("clear command params", command_params={"clear_confirm": confirm})
     state: ContextObject = context.obj
 
     confirm_clear: bool = (
@@ -280,13 +311,15 @@ def clear_tasks(
 
 @app.command("config")
 def config_cli(context: typer.Context) -> None:
-    state: ContextObject = context.obj
+    logger.info("User invoked 'config' command")
 
+    state: ContextObject = context.obj
     state.config.main_configuration_ui()
 
 
 @app.command("reset")
 def reset_files():
+    logger.info("User invoked 'reset' command")
     reset_confirm = questionary.confirm(
         "Are you sure you want to reset all your tasks and configs? NOTE: This won't reset app logs."
     ).ask()
@@ -302,11 +335,10 @@ def initialize(
     context: typer.Context,
     verbose: Annotated[
         Optional[bool],
-        typer.Option(
-            "-v", "--verbose", help="This flag enables verbose mode", expose_value=False
-        ),
+        typer.Option("--verbose", "-v", help="This flag enables verbose mode"),
     ] = False,
 ) -> None:
+    """TaskCLI: A tool to help organize and list your tasks"""
     # basically this is the first thing that runs when app() is called
     # we first check storage to generate the files and stuff if they dont exist, then
     # we create a context.obj to store the variables in
@@ -329,6 +361,7 @@ def initialize(
     context_config: config.Config = config.Config()
     final_verbose_mode: bool = context_config.behaviour_settings.verbose_mode or verbose
 
+    logger.debug(f"Verbose mode is {final_verbose_mode}")
     if final_verbose_mode:
         logger.add(
             sys.stderr,

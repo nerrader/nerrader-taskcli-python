@@ -111,11 +111,16 @@ class TasklistManager:
     def reset_next_id(self) -> None:
         """Should only be done in clear_tasklist()"""
         self._next_id = 1
+        logger.info("Resetted next ID back to 1")
 
     def find_target_task(self, target_id: int) -> Task | None:
         """Finds the target task according to the target id passed as an argument,
         then sends the entire dictionary of the task with that ID"""
-        return next((task for task in self.tasklist if task.id == target_id), None)
+        target_task = next(
+            (task for task in self.tasklist if task.id == target_id), None
+        )
+        logger.debug("Found target task", task=target_task)
+        return target_task
 
     def add_task(
         self, name: str, priority: Optional[str] = None, status: Optional[str] = None
@@ -143,11 +148,14 @@ class TasklistManager:
                 )
             new_task: Task = Task(self.next_id, name, priority=priority, status=status)
             self.tasklist.append(new_task)
+
             logger.success(
                 "Appended new task to the tasklist", task_dict=new_task.to_dict()
             )
+
             self.increment_id()
             self.save_tasks()
+
             return ResultManager(
                 True,
                 f"Successfully added task '{name}' with priority '{priority}' with ID {new_task.id}",
@@ -202,6 +210,9 @@ class TasklistManager:
         if not validated_update_contents:
             return ResultManager(False, "There were no contents to update")
         # the checking if its a valid_priority will be done in the class itself using @property.setter
+        logger.debug(
+            "The validated update contents", contents=validated_update_contents
+        )
         return ResultManager(
             True, "Updated contents seems good", validated_update_contents
         )
