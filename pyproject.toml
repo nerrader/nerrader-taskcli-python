@@ -9,9 +9,11 @@ description = "An easy to use taskcli for managing your tasks, built using pytho
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "dateparser>=1.4.0",
     "loguru>=0.7.3",
     "questionary>=2.1.1",
     "typer>=0.24.1",
+    "types-dateparser>=1.4.0.20260408",
 ]
 authors = [
     { name = "nerrader" }
@@ -20,7 +22,6 @@ license = "MIT"
 
 [dependency-groups]
 dev = [
-    "bandit>=1.9.4",
     "mypy>=1.20.0",
     "pip-audit>=2.10.0",
     "radon>=6.0.1",

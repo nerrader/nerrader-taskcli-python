@@ -57,7 +57,7 @@ class Config:
     }
 
     def __init__(self) -> None:
-        data = storage.json_io(storage.CONFIG_FILEPATH)
+        data: dict = self.load_configs()
 
         self._visible_columns: list[str] = data["visible_columns"]
         self._default_priority: str = data["default_priority"]
@@ -113,7 +113,13 @@ class Config:
     def behaviour_settings(self):
         return self._behaviour_settings
 
+    @logger.catch(level="CRITICAL")
+    def load_configs(self) -> dict:
+        config_json: dict = storage.json_io(storage.CONFIG_FILEPATH)
+        return config_json
+
     # pretty self explanatory i think
+    @logger.catch(level="CRITICAL")
     def save_config(self):
         data = {
             "visible_columns": self._visible_columns,
@@ -123,6 +129,7 @@ class Config:
         storage.json_io(storage.CONFIG_FILEPATH, data)
         logger.success("Successfully saved configs")
 
+    @logger.catch(level="ERROR")
     def _configure_table_column_visibility(self) -> None:
         """
         NOTE: THIS FUNCTION SHOULD ONLY BE CALLED IN main_configuration_ui()
@@ -148,6 +155,7 @@ class Config:
             logger.info("User cancelled visible columns change")
         return
 
+    @logger.catch(level="ERROR")
     def _configre_default_priority(self) -> None:
         """NOTE: THIS SHOULD ONLY BE USED ON main_configuration_ui()
 
@@ -167,6 +175,7 @@ class Config:
             logger.info("User cancelled default priority changes")
         return
 
+    @logger.catch(level="ERROR")
     def _configure_behaviour_settings(self) -> None:
         """NOTE: THIS SHOULD ONLY BE USED ON main_configuration_ui()
 
@@ -201,6 +210,7 @@ class Config:
                 continue
             setattr(self.behaviour_settings, behaviour_setting, False)
 
+    @logger.catch(level="ERROR")
     def reset_defaults(self) -> None:
         """
         NOTE: meant to be used in main_configuration_ui(), but maybe can be used somewhere else.
@@ -212,6 +222,7 @@ class Config:
         self._behaviour_settings = BehaviourConfig(**defaults["behaviour_settings"])
         logger.info("User has reset the configuration settings back to default.")
 
+    @logger.catch(level="ERROR")
     def main_configuration_ui(self) -> None:
         """pretty self explanatory, it creates the main configuration ui"""
         # why dont you make a new_config variable?

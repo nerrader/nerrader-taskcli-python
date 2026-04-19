@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import sys  # we import sys for stderr for loguru specifically
-from typing import Annotated, Optional
+from typing import Annotated
 
 from loguru import logger  # for logging
 import questionary  # for cli prompts (confirm/selection/checkbox)
@@ -60,15 +60,26 @@ def add_task(
     context: typer.Context,
     name: Annotated[list[str], typer.Argument(help="The name of the task")],
     priority: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--priority", "-p", help="The priority of the created task"),
     ] = None,  # let the add_task() get the default priority later
     status: Annotated[
-        Optional[str],
-        typer.Option("--status", "-s", help="The status of the created task"),
+        str | None,
+        typer.Option("--status", "-s", help="The status of the task"),
     ] = None,  # the __init__ in task class will automatically add a default value
+    duedate: Annotated[
+        str | None,
+        typer.Option(
+            "--duedate",
+            "-d",
+            help="The duedate of the task. Enter a shortcut (tomorrow, next week), or a date (MM-DD-YYYY)",
+        ),
+    ] = None,
 ) -> None:
     """Adds a task to the tasklist with the args being the values of the attributes for the task.
+
+    args are pretty self explanatory wont add them here, except for one:
+    context (typer.Context): The context required to read and write to the needed global variables
 
     Raises:
         typer.BadParameter: If the priority provided by the user is not a valid priority, raise this error.
@@ -78,7 +89,12 @@ def add_task(
     )
     logger.debug(
         "command_params",
-        command_params={"name": name, "priority": priority, "status": status},
+        command_params={
+            "name": name,
+            "priority": priority,
+            "status": status,
+            "duedate": duedate,
+        },
     )
 
     # literally just for the autocomplete really
@@ -88,16 +104,16 @@ def add_task(
     joined_name: str = (" ".join(name)).strip()
 
     # the add_task function will deal with the missing values themselves
-    results = state.task_manager.add_task(joined_name, priority, status)
+    results = state.task_manager.add_task(joined_name, priority, status, duedate)
     handleResults(results)
     display_tasks_table(context)
 
 
 @logger.catch(level="ERROR")
 @app.command("delete")
-@app.command("remove")
-@app.command("del")
-@app.command("rm")
+@app.command("remove", help="Alias for delete command")
+@app.command("del", help="Alias for delete command")
+@app.command("rm", help="Alias for delete command")
 def delete_task(
     context: typer.Context,
     task_id: Annotated[
@@ -107,6 +123,7 @@ def delete_task(
     """Deletes a task based on the task id given by the user
 
     Args:
+        context (typer.Context): The context required to read and write to the needed global variables
         task_id (int): The task ID of the given task that the user wants to delete.
     """
     logger.info("User invoked 'delete' command")
@@ -123,7 +140,8 @@ def delete_task(
         .ask()
     )
     if not confirm_delete:
-        print("Task deletion cancelled")
+        print("Task deletion cancelled", style="info")
+        logger.info("Task deletion was cancelled")
         return
 
     results = state.task_manager.delete_task(task_id)
@@ -137,19 +155,28 @@ def update_task(
     context: typer.Context,
     task_id: int,
     updated_name: Annotated[
-        Optional[list[str]], typer.Option("--name", "-n", help="The updated name")
+        list[str] | None, typer.Option("--name", "-n", help="The updated name")
     ] = None,
     updated_priority: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--priority", "-p", help="The updated priority"),
+    ] = None,
+    updated_duedate: Annotated[
+        str | None,
+        typer.Option(
+            "--duedate",
+            "-d",
+            help="The duedate of the task. Enter a shortcut (tomorrow, next week), or a date (MM-DD-YYYY)",
+        ),
     ] = None,
 ) -> None:
     """Updates a specific task given the task id by the user.
 
     Args:
+        context (typer.Context): The context required to read and write to the needed global variables
         task_id (int): The task ID of the task that the user wants to update.
-        updated_name (Optional[str]): The updated name given by the user. Defaults to None.
-        updated_priority (Optional[str]): The updated priority given by the user. Defaults to None.
+        updated_name (str | None): The updated name given by the user. Defaults to None.
+        updated_priority (str | None): The updated priority given by the user. Defaults to None.
     """
     logger.info(
         "User invoked 'update' command",
@@ -160,6 +187,7 @@ def update_task(
             "task_id": task_id,
             "updated_name": updated_name,
             "updated_priority": updated_priority,
+            "updated_duedate": updated_duedate,
         },
     )
     # literally just for the autocomplete really
@@ -169,6 +197,7 @@ def update_task(
     raw_updated_contents = {
         "name": joined_updated_name,
         "priority": updated_priority,
+        "updated_duedate": updated_duedate,
     }
 
     results = state.task_manager.update_task(task_id, raw_updated_contents)
@@ -187,6 +216,13 @@ def mark_task(
         str, typer.Argument(help="The updated status of the task ID given by the user")
     ],
 ) -> None:
+    """Updates a task's status based on the task id and the updated status given by the user
+
+    Args:
+        context (typer.Context): The context required to read and write to the needed global variables
+        task_id (int): The task ID given by the user
+        updated_status (str): The updated status given by the user
+    """
     logger.info("User invoked 'mark' command")
     logger.debug(
         "mark command params",
@@ -198,10 +234,7 @@ def mark_task(
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
-    if updated_status not in tasks.Task.VALID_STATUSES:
-        raise typer.BadParameter(
-            f"Invalid status: '{updated_status}'. Must be one of {tasks.Task.VALID_STATUSES}"
-        )
+    # dw, the task class setter will deal with invalid statuses
     results = state.task_manager.mark_task(task_id, updated_status)
     handleResults(results)
     display_tasks_table(context)
@@ -215,7 +248,8 @@ def display_tasks_table(context: typer.Context) -> None:
     if len(state.task_manager.tasklist) == 0:
         print("There is nothing in the tasklist...", style="info")
     tasks_table = Table(
-        title="Tasklist", show_lines=state.config.behaviour_settings.show_table_lines
+        title="The Tasklist",
+        show_lines=state.config.behaviour_settings.show_table_lines,
     )
 
     # where else am i supposed to put it
@@ -259,6 +293,7 @@ def display_tasks_table(context: typer.Context) -> None:
             "Name": task.name,
             "Status": f"[{task_status_color}]{task.status}[/]",
             "Priority": f"[{task_priority_color}]{task.priority}[/]",
+            "Duedate": task.duedate if task.duedate is not None else "None",
         }
 
         for column_name in state.config.visible_columns:
@@ -271,9 +306,10 @@ def display_tasks_table(context: typer.Context) -> None:
 
 @logger.catch(level="ERROR")
 @app.command("list")
-@app.command("view")
-@app.command("ls")
+@app.command("view", help="Alias for list command")
+@app.command("ls", help="Alias for list command")
 def list_tasks(context: typer.Context) -> None:
+    """To list the tasks from the tasklist"""
     logger.info("User invoked 'list' command")
     """The actual CLI Command to list the rich table tasklist"""
     display_tasks_table(context)
@@ -284,11 +320,16 @@ def list_tasks(context: typer.Context) -> None:
 def clear_tasks(
     context: typer.Context,
     confirm: Annotated[
-        Optional[bool],
+        bool,
         typer.Option("--confirm", "-c", help="Skips the confirmation prompt"),
     ] = False,
 ) -> None:
-    """Asks a confirmation prompt first, then if they confirm, clear the tasklist"""
+    """Asks a confirmation prompt first, then if they confirm, clear the tasklist
+
+    Args:
+        context (typer.Context): The context required to read and write to the needed global variables
+        confirm (bool): Defaults to False, if value is false, then confirmation is still required, otherwise, skip the prompt
+    """
     # literally just for the autocomplete really
     logger.info("User invoked 'clear' command")
     logger.debug("clear command params", command_params={"clear_confirm": confirm})
@@ -303,22 +344,31 @@ def clear_tasks(
         .ask()
     )
     if not confirm_clear:
+        print("Tasklist clear cancelled", style="info")
         logger.info("Cancelled clearing of tasklist")
         return
     results = state.task_manager.clear_tasklist()
     handleResults(results)
 
 
+@logger.catch(level="ERROR")
 @app.command("config")
 def config_cli(context: typer.Context) -> None:
+    """To configure the TaskCLI settings
+
+    Args:
+        context (typer.Context): The needed glo
+    """
     logger.info("User invoked 'config' command")
 
     state: ContextObject = context.obj
     state.config.main_configuration_ui()
 
 
+@logger.catch(level="ERROR")
 @app.command("reset")
 def reset_files():
+    """Resets all the userdata including the taskcli and configs, does not include logs."""
     logger.info("User invoked 'reset' command")
     reset_confirm = questionary.confirm(
         "Are you sure you want to reset all your tasks and configs? NOTE: This won't reset app logs."
@@ -334,7 +384,7 @@ def reset_files():
 def initialize(
     context: typer.Context,
     verbose: Annotated[
-        Optional[bool],
+        bool,
         typer.Option("--verbose", "-v", help="This flag enables verbose mode"),
     ] = False,
 ) -> None:

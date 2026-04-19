@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import datetime
+from typing import Any
 
+from dateparser import parse as dateparser
 from loguru import logger
 
 from taskcli import config
@@ -17,16 +19,13 @@ class Task:
 
     # function rehydrate_loaded_tasks is the reason why we cant just remove the status from here
     def __init__(
-        self,
-        next_id: int,
-        name: str,
-        priority: str,
-        status: str,
+        self, next_id: int, name: str, priority: str, status: str, duedate: str | None
     ) -> None:
         self._id = next_id
         self.name = name
         self._status = status
         self._priority = priority
+        self.duedate = duedate
 
     def to_dict(self) -> dict[str, Any]:
         """Turns the Task class object into a dictionary
@@ -39,6 +38,7 @@ class Task:
             "name": self.name,
             "status": self._status,
             "priority": self._priority,
+            "duedate": self.duedate,
         }
 
     @property
@@ -122,8 +122,29 @@ class TasklistManager:
         logger.debug("Found target task", task=target_task)
         return target_task
 
+    def _validate_due_date(self, original_duedate: str) -> ResultManager:
+        dateparse_settings = {
+            "DATE_ORDER": "MDY",
+            "TIMEZONE": "UTC",
+        }
+        parsed_duedate = dateparser(original_duedate, settings=dateparse_settings)
+        if not parsed_duedate:
+            logger.error(f"Invalid duedate found: {original_duedate}")
+            return ResultManager(
+                False, f"Invalid duedate string found: {original_duedate}"
+            )
+
+        formatted_parsed_duedate = datetime.strftime(parsed_duedate, "%d %b %Y %H:%M")
+        return ResultManager(
+            True, "Successfully parsed due date", formatted_parsed_duedate
+        )
+
     def add_task(
-        self, name: str, priority: Optional[str] = None, status: Optional[str] = None
+        self,
+        name: str,
+        priority: str | None = None,
+        status: str | None = None,
+        duedate: str | None = None,
     ) -> ResultManager:
         """Adds a task to the tasklist, where the name and the priority provided will be the
         attribute values for the task.
@@ -137,16 +158,23 @@ class TasklistManager:
                 logger.info("No priority found in add task function.", data=priority)
                 configs = config.Config()
                 priority = configs.default_priority
-                logger.success(
+                logger.debug(
                     "Successfully set priority to default priority", data=priority
                 )
             if not status:
                 logger.info("No status found in add task function.")
                 status = "todo"
-                logger.success(
-                    "Successfully set status to 'todo' (default)", data=status
-                )
-            new_task: Task = Task(self.next_id, name, priority=priority, status=status)
+                logger.debug("Successfully set status to 'todo' (default)", data=status)
+            if duedate is not None:
+                logger.debug(f"Now validating duedate: {duedate}")
+                results = self._validate_due_date(duedate)
+                if not results.success:
+                    return ResultManager(False, results.message, results.data)
+                duedate = results.data
+                logger.debug(f"Set duedate to {duedate}")
+            new_task: Task = Task(
+                self.next_id, name, priority=priority, status=status, duedate=duedate
+            )
             self.tasklist.append(new_task)
 
             logger.success(
@@ -204,7 +232,7 @@ class TasklistManager:
             key: value
             for key, value in update_contents.items()
             if (
-                value.strip() if value is not None else None
+                value.strip() if isinstance(value, str) else None
             )  # if value.strip() exists if value exists
         }
         if not validated_update_contents:
@@ -213,10 +241,19 @@ class TasklistManager:
         logger.debug(
             "The validated update contents", contents=validated_update_contents
         )
+        if validated_update_contents.get("updated_duedate"):
+            results = self._validate_due_date(
+                validated_update_contents["updated_duedate"]
+            )
+            if not results.success:
+                return ResultManager(False, results.message)
+            print(results.data)
+            validated_update_contents["duedate"] = results.data
         return ResultManager(
             True, "Updated contents seems good", validated_update_contents
         )
 
+    @logger.catch(level="ERROR")
     def update_task(
         self, task_id: int, updated_contents: dict[str, Any]
     ) -> ResultManager:
@@ -274,6 +311,7 @@ class TasklistManager:
             error_message = str(error)
             return ResultManager(False, error_message)
 
+    @logger.catch(level="ERROR")
     def clear_tasklist(self) -> ResultManager:
         self.tasklist = []
         self.reset_next_id()
@@ -281,6 +319,7 @@ class TasklistManager:
         return ResultManager(True, "Successfully cleared all tasks in tasklist!")
 
     # make it a docstring later, so basically it rehydrates those dictionaries into classes
+    @logger.catch(level="CRITICAL")
     def _rehydrate_loaded_tasks(self) -> list[Task]:
         """
         NOTE: THIS SHOULD ONLY BE USED IN THE __init__ FUNCTION OF TASK MANAGER CLASS
@@ -296,6 +335,7 @@ class TasklistManager:
                 task["name"],
                 priority=task["priority"],
                 status=task["status"],
+                duedate=task["duedate"],
             )
             for task in self.old_tasklist
         ]
@@ -306,6 +346,7 @@ class TasklistManager:
         )
         return rehydrated_tasklist
 
+    @logger.catch(level="CRITICAL")
     def save_tasks(self) -> None:
         """Turns all the tasks into a dictionary, then saves all the tasks in storage.TASKS_FILEPATH
         (json file for storing tasks filepath)"""
