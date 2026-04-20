@@ -18,6 +18,7 @@ class BehaviourConfig:
     show_table_lines: bool
     show_priority_colors: bool
     show_status_colors: bool
+    show_duedate_colors: bool
     verbose_mode: bool
 
     def __setattr__(self, name, value):
@@ -52,6 +53,7 @@ class Config:
             "show_table_lines": True,
             "show_status_colors": True,
             "show_priority_colors": True,
+            "show_duedate_colors": True,
             "verbose_mode": False,
         },
     }

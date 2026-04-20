@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime as dt
 from typing import Any
 
 from dateparser import parse as dateparser
@@ -19,7 +19,7 @@ class Task:
 
     # function rehydrate_loaded_tasks is the reason why we cant just remove the status from here
     def __init__(
-        self, next_id: int, name: str, priority: str, status: str, duedate: str | None
+        self, next_id: int, name: str, priority: str, status: str, duedate: dt | None
     ) -> None:
         self._id = next_id
         self.name = name
@@ -38,8 +38,37 @@ class Task:
             "name": self.name,
             "status": self._status,
             "priority": self._priority,
-            "duedate": self.duedate,
+            "duedate": self.duedate.isoformat() if self.duedate else None,
         }
+
+    def get_duedate_info(self) -> tuple[str, str]:
+        """Returns the general duedate info needed for the list tasks function
+        NOTE: THIS FUNCTION WAS ONLY MEANT TO BE USED IN list_tasks() in main.py
+
+        Returns:
+            tuple[str, str]: The first string contains the formatted duedate,
+            the second one contains the desired color of the string
+        """
+        if not self.duedate:
+            return ("None", "white")
+
+        formatted_duedate = self.duedate.strftime("%d %b %Y %H:%M")
+
+        time_diff = (self.duedate - (dt.now().astimezone())).total_seconds()
+
+        # if overdue
+        if time_diff < 0:
+            color = "bold red"
+        # if in one day
+        elif time_diff < 86400:
+            color = "orange3"
+        # if in 3 days
+        elif time_diff < 259200:
+            color = "yellow"
+        else:
+            color = "green"
+
+        return formatted_duedate, color
 
     @property
     def id(self):
@@ -79,6 +108,7 @@ class ResultManager:
     success: bool
     message: str
     data: Any = None
+    id: str = None
 
     # This function runs if you want to print the resultmanager on the terminal
     # Only used in main.py
@@ -122,26 +152,33 @@ class TasklistManager:
         logger.debug("Found target task", task=target_task)
         return target_task
 
-    def _validate_due_date(self, original_duedate: str) -> ResultManager:
+    def _parse_duedate(self, original_duedate: str) -> ResultManager:
+        """Validates the duedate by running it through a dateparser function, and catching if it returns None.
+
+        Args:
+            original_duedate (str): The original string for the unparsed duedate
+
+        Returns:
+            ResultManager: The results of the function. If run successfully will contain a datetime object in the data.
+        """
         dateparse_settings = {
             "DATE_ORDER": "MDY",
-            "TIMEZONE": "UTC",
+            "RETURN_AS_TIMEZONE_AWARE": True,
         }
         parsed_duedate = dateparser(original_duedate, settings=dateparse_settings)
         if not parsed_duedate:
-            logger.error(f"Invalid duedate found: {original_duedate}")
+            logger.error(f"Invalid duedate found: {original_duedate}. Setting to None.")
             return ResultManager(
-                False, f"Invalid duedate string found: {original_duedate}"
+                False,
+                f"Invalid duedate string found: {original_duedate}. Setting to None.",
+                id="set-duedate-none",
             )
-
-        formatted_parsed_duedate = datetime.strftime(parsed_duedate, "%d %b %Y %H:%M")
-        return ResultManager(
-            True, "Successfully parsed due date", formatted_parsed_duedate
-        )
+        return ResultManager(True, "Successfully parsed duedate", parsed_duedate)
 
     def add_task(
         self,
         name: str,
+        configs: config.Config,
         priority: str | None = None,
         status: str | None = None,
         duedate: str | None = None,
@@ -156,7 +193,6 @@ class TasklistManager:
             # if no priority, set priority to default
             if not priority:
                 logger.info("No priority found in add task function.", data=priority)
-                configs = config.Config()
                 priority = configs.default_priority
                 logger.debug(
                     "Successfully set priority to default priority", data=priority
@@ -165,15 +201,25 @@ class TasklistManager:
                 logger.info("No status found in add task function.")
                 status = "todo"
                 logger.debug("Successfully set status to 'todo' (default)", data=status)
-            if duedate is not None:
+
+            # keep duedate as None, and only validate it if they passed an argument/string
+            new_duedate: dt | None = None
+            if isinstance(duedate, str):
                 logger.debug(f"Now validating duedate: {duedate}")
-                results = self._validate_due_date(duedate)
+                results: ResultManager = self._parse_duedate(duedate)
                 if not results.success:
+                    logger.error(
+                        "Either the validate_duedate or format_parsed_duedate function returned a failed ResultManager."
+                    )
                     return ResultManager(False, results.message, results.data)
-                duedate = results.data
+                new_duedate = results.data
                 logger.debug(f"Set duedate to {duedate}")
             new_task: Task = Task(
-                self.next_id, name, priority=priority, status=status, duedate=duedate
+                self.next_id,
+                name,
+                priority=priority,
+                status=status,
+                duedate=new_duedate,
             )
             self.tasklist.append(new_task)
 
@@ -242,12 +288,13 @@ class TasklistManager:
             "The validated update contents", contents=validated_update_contents
         )
         if validated_update_contents.get("updated_duedate"):
-            results = self._validate_due_date(
-                validated_update_contents["updated_duedate"]
-            )
+            results = self._parse_duedate(validated_update_contents["updated_duedate"])
             if not results.success:
-                return ResultManager(False, results.message)
-            print(results.data)
+                return ResultManager(
+                    False,
+                    results.message,
+                    id=results.id,
+                )
             validated_update_contents["duedate"] = results.data
         return ResultManager(
             True, "Updated contents seems good", validated_update_contents
@@ -276,6 +323,10 @@ class TasklistManager:
 
         # checks if the update contents are valid
         results = self._validate_update_contents(updated_contents)
+        if results.id == "set-duedate-none":
+            target_task.duedate = None
+            self.save_tasks()
+            return ResultManager(False, results.message)
         if not results.success:
             return ResultManager(
                 False, f"The updated contents were not valid: {results.message}"
@@ -329,16 +380,21 @@ class TasklistManager:
         dictionary
         """
         # this will replace the dictionaries with task class objects
-        rehydrated_tasklist = [
-            Task(
-                task["id"],
-                task["name"],
-                priority=task["priority"],
-                status=task["status"],
-                duedate=task["duedate"],
+        rehydrated_tasklist: list[Task] = []
+        for task in self.old_tasklist:
+            # Convert string back to datetime object
+            raw_date = task.get("duedate")
+            parsed_date = dt.fromisoformat(raw_date) if raw_date else None
+
+            rehydrated_tasklist.append(
+                Task(
+                    task["id"],
+                    task["name"],
+                    priority=task["priority"],
+                    status=task["status"],
+                    duedate=parsed_date,
+                )
             )
-            for task in self.old_tasklist
-        ]
         logger.success("Rehydrated the tasklist with new task classes")
         logger.debug(
             "Rehydrated tasklist",

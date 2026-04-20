@@ -104,9 +104,16 @@ def add_task(
     joined_name: str = (" ".join(name)).strip()
 
     # the add_task function will deal with the missing values themselves
-    results = state.task_manager.add_task(joined_name, priority, status, duedate)
+    results = state.task_manager.add_task(
+        joined_name,
+        state.config,
+        priority,
+        status,
+        duedate,
+    )
     handleResults(results)
-    display_tasks_table(context)
+    if results.success:
+        display_tasks_table(context)
 
 
 @logger.catch(level="ERROR")
@@ -146,7 +153,8 @@ def delete_task(
 
     results = state.task_manager.delete_task(task_id)
     handleResults(results)
-    display_tasks_table(context)
+    if results.success:
+        display_tasks_table(context)
 
 
 @logger.catch(level="ERROR")
@@ -202,7 +210,8 @@ def update_task(
 
     results = state.task_manager.update_task(task_id, raw_updated_contents)
     handleResults(results)
-    display_tasks_table(context)
+    if results.success:
+        display_tasks_table(context)
 
 
 @logger.catch(level="ERROR")
@@ -237,7 +246,8 @@ def mark_task(
     # dw, the task class setter will deal with invalid statuses
     results = state.task_manager.mark_task(task_id, updated_status)
     handleResults(results)
-    display_tasks_table(context)
+    if results.success:
+        display_tasks_table(context)
 
 
 def display_tasks_table(context: typer.Context) -> None:
@@ -286,6 +296,10 @@ def display_tasks_table(context: typer.Context) -> None:
         if state.config.behaviour_settings.show_status_colors:
             task_status_color = status_colors[task.status]
 
+        # for the formatting task duedate
+        # setting defaults if duedate is None
+        formatted_duedate, task_duedate_color = task.get_duedate_info()
+
         visible_task_contents: list[str] = []
 
         task_attribute_map = {
@@ -293,7 +307,9 @@ def display_tasks_table(context: typer.Context) -> None:
             "Name": task.name,
             "Status": f"[{task_status_color}]{task.status}[/]",
             "Priority": f"[{task_priority_color}]{task.priority}[/]",
-            "Duedate": task.duedate if task.duedate is not None else "None",
+            "Duedate": f"[{task_duedate_color}]{formatted_duedate}[/]"
+            if formatted_duedate is not None
+            else "None",
         }
 
         for column_name in state.config.visible_columns:
@@ -357,7 +373,7 @@ def config_cli(context: typer.Context) -> None:
     """To configure the TaskCLI settings
 
     Args:
-        context (typer.Context): The needed glo
+        context (typer.Context): The needed context to access and change the global variables.
     """
     logger.info("User invoked 'config' command")
 
@@ -377,7 +393,7 @@ def reset_files():
     if reset_confirm:
         storage.reset_files()
         print("Successfully reset files!", style="success")
-        logger.success("Successfully reset appdata files!")
+        logger.success("Successfully reset app data files!")
 
 
 @app.callback()
@@ -420,7 +436,7 @@ def initialize(
         )
 
     context.obj = ContextObject(task_manager, context_config, final_verbose_mode)
-    logger.info(
+    logger.debug(
         "App initialization done. Put all the variables needed in context.obj",
     )
 
@@ -431,8 +447,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# add duedates and make verbose mode work and also list filtering when listing tasks (release taskcli revamp after)
-# make it so that you can change between tasklists (branches pretty much)
-# add tags and task groups
-# undo redo
