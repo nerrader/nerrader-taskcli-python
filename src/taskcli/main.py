@@ -92,6 +92,7 @@ def add_task(
 
     # to override the old list[str] so mypys happy
     joined_name: str = (" ".join(name)).strip()
+    parsed_duedate = None
     if duedate:
         results = state.task_manager.parse_duedate(duedate)
         parsed_duedate: dt | None = results.data if results.data else None
@@ -196,6 +197,7 @@ def update_task(
     state: ContextObject = context.obj
 
     joined_updated_name: str | None = " ".join(updated_name) if updated_name else None
+    parsed_updated_duedate = None
     if updated_duedate:
         results = state.task_manager.parse_duedate(updated_duedate)
         parsed_updated_duedate = results.data if results.data else None
