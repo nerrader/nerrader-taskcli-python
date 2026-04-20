@@ -1,11 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
 [project]
 name = "taskcli"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "An easy to use taskcli for managing your tasks, built using python's typer library."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "pyinstaller>=6.19.0",
+    "dateparser>=1.4.0",
+    "loguru>=0.7.3",
     "questionary>=2.1.1",
-    "rich>=14.3.3",
+    "typer>=0.24.1",
+    "types-dateparser>=1.4.0.20260408",
 ]
+authors = [
+    { name = "nerrader" }
+]
+license = "MIT"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.20.0",
+    "pip-audit>=2.10.0",
+    "radon>=6.0.1",
+    "ruff>=0.15.9",
+    "vulture>=2.16",
+]
+
+
+[project.scripts]
+taskcli = "taskcli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/taskcli"]
+
