@@ -1,3 +1,4 @@
+from datetime import datetime as dt
 from dataclasses import dataclass
 import sys  # we import sys for stderr for loguru specifically
 from typing import Annotated
@@ -76,25 +77,14 @@ def add_task(
         ),
     ] = None,
 ) -> None:
-    """Adds a task to the tasklist with the args being the values of the attributes for the task.
+    """Adds a task to the tasklist based on its name, priority, status, and duedates are set to default if not given.
 
     args are pretty self explanatory wont add them here, except for one:
     context (typer.Context): The context required to read and write to the needed global variables
-
-    Raises:
-        typer.BadParameter: If the priority provided by the user is not a valid priority, raise this error.
+    config (config.Config): only required to make the thing fill in the default priority if priority is not given by user
     """
     logger.info(
         "User invoked add command",
-    )
-    logger.debug(
-        "command_params",
-        command_params={
-            "name": name,
-            "priority": priority,
-            "status": status,
-            "duedate": duedate,
-        },
     )
 
     # literally just for the autocomplete really
@@ -102,14 +92,26 @@ def add_task(
 
     # to override the old list[str] so mypys happy
     joined_name: str = (" ".join(name)).strip()
+    if duedate:
+        results = state.task_manager.parse_duedate(duedate)
+        parsed_duedate: dt | None = results.data if results.data else None
 
     # the add_task function will deal with the missing values themselves
+    logger.debug(
+        "task manager add task command_params",
+        command_params={
+            "name": joined_name,
+            "priority": priority,
+            "status": status,
+            "duedate": parsed_duedate or None,
+        },
+    )
     results = state.task_manager.add_task(
         joined_name,
         state.config,
         priority,
         status,
-        duedate,
+        parsed_duedate,
     )
     handleResults(results)
     if results.success:
@@ -127,7 +129,7 @@ def delete_task(
         int, typer.Argument(help="The task id of the task being deleted")
     ],
 ) -> None:
-    """Deletes a task based on the task id given by the user
+    """Deletes a task based on its ID.
 
     Args:
         context (typer.Context): The context required to read and write to the needed global variables
@@ -178,7 +180,7 @@ def update_task(
         ),
     ] = None,
 ) -> None:
-    """Updates a specific task given the task id by the user.
+    """Updates a specific task given task ID. You can update the priority and duedate of the task .Does not allow updating statuses, use the mark command instead.
 
     Args:
         context (typer.Context): The context required to read and write to the needed global variables
@@ -189,24 +191,28 @@ def update_task(
     logger.info(
         "User invoked 'update' command",
     )
-    logger.debug(
-        "update command params",
-        command_params={
-            "task_id": task_id,
-            "updated_name": updated_name,
-            "updated_priority": updated_priority,
-            "updated_duedate": updated_duedate,
-        },
-    )
+
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
     joined_updated_name: str | None = " ".join(updated_name) if updated_name else None
+    if updated_duedate:
+        results = state.task_manager.parse_duedate(updated_duedate)
+        parsed_updated_duedate = results.data if results.data else None
     raw_updated_contents = {
         "name": joined_updated_name,
         "priority": updated_priority,
-        "updated_duedate": updated_duedate,
+        "duedate": parsed_updated_duedate or None,
     }
+    logger.debug(
+        "update command params",
+        command_params={
+            "task_id": task_id,
+            "updated_name": joined_updated_name,
+            "updated_priority": updated_priority,
+            "updated_duedate": parsed_updated_duedate,
+        },
+    )
 
     results = state.task_manager.update_task(task_id, raw_updated_contents)
     handleResults(results)
@@ -225,7 +231,7 @@ def mark_task(
         str, typer.Argument(help="The updated status of the task ID given by the user")
     ],
 ) -> None:
-    """Updates a task's status based on the task id and the updated status given by the user
+    """Updates a task's status based on task ID.
 
     Args:
         context (typer.Context): The context required to read and write to the needed global variables
@@ -251,7 +257,7 @@ def mark_task(
 
 
 def display_tasks_table(context: typer.Context) -> None:
-    """This is an internal CLI Command to display the rich table based off the tasklist"""
+    """This is an internal CLI Command to display the rich table based off the tasklist."""
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
@@ -340,7 +346,7 @@ def clear_tasks(
         typer.Option("--confirm", "-c", help="Skips the confirmation prompt"),
     ] = False,
 ) -> None:
-    """Asks a confirmation prompt first, then if they confirm, clear the tasklist
+    """Asks a confirmation prompt first, then if they confirm, clear the tasklist.
 
     Args:
         context (typer.Context): The context required to read and write to the needed global variables
@@ -370,7 +376,7 @@ def clear_tasks(
 @logger.catch(level="ERROR")
 @app.command("config")
 def config_cli(context: typer.Context) -> None:
-    """To configure the TaskCLI settings
+    """To configure the TaskCLI settings.
 
     Args:
         context (typer.Context): The needed context to access and change the global variables.
@@ -384,7 +390,7 @@ def config_cli(context: typer.Context) -> None:
 @logger.catch(level="ERROR")
 @app.command("reset")
 def reset_files():
-    """Resets all the userdata including the taskcli and configs, does not include logs."""
+    """Resets all the user data including the taskcli and configs, does not include logs."""
     logger.info("User invoked 'reset' command")
     reset_confirm = questionary.confirm(
         "Are you sure you want to reset all your tasks and configs? NOTE: This won't reset app logs."

@@ -33,6 +33,8 @@ class Task:
         This is becasue Task class objects cannot be saved into a json file, you have to
         turn it into a dictionary first.
         """
+        # problem with duedate is that its a datetime object, objects cant be saved in json
+        # so we make it an isostring and rehydrate it back to datetime later
         return {
             "id": self._id,
             "name": self.name,
@@ -53,7 +55,6 @@ class Task:
             return ("None", "white")
 
         formatted_duedate = self.duedate.strftime("%d %b %Y %H:%M")
-
         time_diff = (self.duedate - (dt.now().astimezone())).total_seconds()
 
         # if overdue
@@ -108,7 +109,6 @@ class ResultManager:
     success: bool
     message: str
     data: Any = None
-    id: str = None
 
     # This function runs if you want to print the resultmanager on the terminal
     # Only used in main.py
@@ -122,7 +122,7 @@ class TasklistManager:
     do some other stuff to manipulate the tasklist correctly"""
 
     def __init__(self) -> None:
-        data = storage.json_io(storage.TASKS_FILEPATH)
+        data = storage.load_json(storage.TASKS_FILEPATH)
 
         self.old_tasklist: list[dict[str, Any]] = data["tasklist"]
 
@@ -152,7 +152,7 @@ class TasklistManager:
         logger.debug("Found target task", task=target_task)
         return target_task
 
-    def _parse_duedate(self, original_duedate: str) -> ResultManager:
+    def parse_duedate(self, original_duedate: str) -> ResultManager:
         """Validates the duedate by running it through a dateparser function, and catching if it returns None.
 
         Args:
@@ -165,7 +165,9 @@ class TasklistManager:
             "DATE_ORDER": "MDY",
             "RETURN_AS_TIMEZONE_AWARE": True,
         }
-        parsed_duedate = dateparser(original_duedate, settings=dateparse_settings)
+        parsed_duedate: dt | None = dateparser(
+            original_duedate, settings=dateparse_settings
+        )
         if not parsed_duedate:
             logger.error(f"Invalid duedate found: {original_duedate}. Setting to None.")
             return ResultManager(
@@ -181,7 +183,7 @@ class TasklistManager:
         configs: config.Config,
         priority: str | None = None,
         status: str | None = None,
-        duedate: str | None = None,
+        duedate: dt | None = None,
     ) -> ResultManager:
         """Adds a task to the tasklist, where the name and the priority provided will be the
         attribute values for the task.
@@ -202,24 +204,13 @@ class TasklistManager:
                 status = "todo"
                 logger.debug("Successfully set status to 'todo' (default)", data=status)
 
-            # keep duedate as None, and only validate it if they passed an argument/string
-            new_duedate: dt | None = None
-            if isinstance(duedate, str):
-                logger.debug(f"Now validating duedate: {duedate}")
-                results: ResultManager = self._parse_duedate(duedate)
-                if not results.success:
-                    logger.error(
-                        "Either the validate_duedate or format_parsed_duedate function returned a failed ResultManager."
-                    )
-                    return ResultManager(False, results.message, results.data)
-                new_duedate = results.data
-                logger.debug(f"Set duedate to {duedate}")
+            # duedate already parsed
             new_task: Task = Task(
                 self.next_id,
                 name,
                 priority=priority,
                 status=status,
-                duedate=new_duedate,
+                duedate=duedate,
             )
             self.tasklist.append(new_task)
 
@@ -287,15 +278,6 @@ class TasklistManager:
         logger.debug(
             "The validated update contents", contents=validated_update_contents
         )
-        if validated_update_contents.get("updated_duedate"):
-            results = self._parse_duedate(validated_update_contents["updated_duedate"])
-            if not results.success:
-                return ResultManager(
-                    False,
-                    results.message,
-                    id=results.id,
-                )
-            validated_update_contents["duedate"] = results.data
         return ResultManager(
             True, "Updated contents seems good", validated_update_contents
         )
@@ -323,17 +305,13 @@ class TasklistManager:
 
         # checks if the update contents are valid
         results = self._validate_update_contents(updated_contents)
-        if results.id == "set-duedate-none":
-            target_task.duedate = None
-            self.save_tasks()
-            return ResultManager(False, results.message)
         if not results.success:
             return ResultManager(
                 False, f"The updated contents were not valid: {results.message}"
             )
-        updated_contents = (
-            results.data
-        )  # the data for the new validated update contents
+
+        # the data for the new validated update contents
+        updated_contents = results.data
 
         # now to finally update it
         for key, value in updated_contents.items():
@@ -382,7 +360,7 @@ class TasklistManager:
         # this will replace the dictionaries with task class objects
         rehydrated_tasklist: list[Task] = []
         for task in self.old_tasklist:
-            # Convert string back to datetime object
+            # Convert isostring back to datetime object
             raw_date = task.get("duedate")
             parsed_date = dt.fromisoformat(raw_date) if raw_date else None
 
@@ -409,7 +387,7 @@ class TasklistManager:
 
         # make the class objects dictionaries first
         saved_tasklist = [task.to_dict() for task in self.tasklist]
-        storage.json_io(
+        storage.write_json(
             storage.TASKS_FILEPATH,
             {"next_id": self.next_id, "tasklist": saved_tasklist},
         )

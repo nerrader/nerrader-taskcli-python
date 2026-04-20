@@ -18,34 +18,21 @@ DEFAULT_TASKS: dict[str, Any] = {"next_id": 1, "tasklist": []}
 # This file is for anything related to reading and writing to files in the main filepath
 
 
-def json_io(filepath: Path, data: Any = None) -> Any:
-    """handles reading and writing to files
+def load_json(filepath: Path) -> Any:
+    try:
+        logger.debug(f"Attemping to read JSON from {filepath}")
+        with open(filepath, "r") as file:
+            file_contents = json.load(file)
+    except FileNotFoundError:
+        file_contents = None
+        logger.error("File was not found in the designated filepath, returning None")
+    return file_contents
 
-    Args:
-        filepath (Path): the filepath of the file
-        data (Any, optional): the data to write to the file, if none is provided, the function will read from the file.
-        Defaults to None.
 
-    Returns:
-        Any: the data read from the file or None if an error occurs or if it was writing
-    """
-    # reading mode
-    if data is None:
-        try:
-            logger.debug(f"Attemping to read JSON from {filepath}")
-            with open(filepath, "r") as file:
-                file_contents = json.load(file)
-        except FileNotFoundError:
-            file_contents = None
-            logger.error(
-                "File was not found in the designated filepath, returning None"
-            )
-        return file_contents
-    # writing mode
-    else:
-        logger.debug(f"Writing data to {filepath}", write_data=data)
-        with open(filepath, "w") as file:
-            json.dump(data, file, indent=4)
+def write_json(filepath: Path, data: Any) -> None:
+    logger.debug(f"Writing data to {filepath}", write_data=data)
+    with open(filepath, "w") as file:
+        json.dump(data, file, indent=4)
 
 
 def check_storage() -> None:
@@ -57,10 +44,10 @@ def check_storage() -> None:
     # check if the files exist, if not create them and fill them with default data
     if not TASKS_FILEPATH.exists():
         logger.debug("Tasklist file wasn't found, set tasks to the starting tasklist.")
-        json_io(TASKS_FILEPATH, DEFAULT_TASKS)
+        write_json(TASKS_FILEPATH, DEFAULT_TASKS)
     if not CONFIG_FILEPATH.exists():
         logger.debug("Config file wasn't found, set configs to default")
-        json_io(CONFIG_FILEPATH, config.Config.DEFAULT_CONFIG)
+        write_json(CONFIG_FILEPATH, config.Config.DEFAULT_CONFIG)
 
 
 def reset_files() -> None:

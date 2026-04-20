@@ -117,7 +117,7 @@ class Config:
 
     @logger.catch(level="CRITICAL")
     def load_configs(self) -> dict:
-        config_json: dict = storage.json_io(storage.CONFIG_FILEPATH)
+        config_json: dict = storage.load_json(storage.CONFIG_FILEPATH)
         return config_json
 
     # pretty self explanatory i think
@@ -128,7 +128,7 @@ class Config:
             "default_priority": self._default_priority,
             "behaviour_settings": asdict(self._behaviour_settings),
         }
-        storage.json_io(storage.CONFIG_FILEPATH, data)
+        storage.write_json(storage.CONFIG_FILEPATH, data)
         logger.success("Successfully saved configs")
 
     @logger.catch(level="ERROR")
