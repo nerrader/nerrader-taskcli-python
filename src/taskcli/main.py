@@ -429,7 +429,9 @@ def initialize(
         format="{time:DD-MM-YYYY_HH:mm:ss} > {name}:{line} > {level}: {message} | {extra}",
     )
 
-    storage.check_storage()
+    storage.check_storage(
+        tasks.TasklistManager.PLACEHOLDER_TASKS, config.Config.DEFAULT_CONFIG
+    )
     task_manager: tasks.TasklistManager = tasks.TasklistManager()
     context_config: config.Config = config.Config()
     final_verbose_mode: bool = context_config.behaviour_settings.verbose_mode or verbose

@@ -37,8 +37,8 @@ class Task:
         return {
             "id": self._id,
             "name": self.name,
-            "status": self._status,
-            "priority": self._priority,
+            "status": self.status,
+            "priority": self.priority,
             "duedate": self.duedate.isoformat() if self.duedate else None,
         }
 
