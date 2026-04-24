@@ -34,28 +34,6 @@ class ContextObject:
     verbose_mode: bool
 
 
-@logger.catch(level="ERROR")
-def handleResults(result: tasks.ResultManager) -> None:
-    """Logs and prints the results, automatically determines level depending on the success value.
-
-    Args:
-        result (tasks.ResultManager): The results given by a function from tasks.py being handled.
-
-    Raises:
-        ValueError: If results were empty or if no results were given, raise this.
-    """
-    if not result:
-        raise ValueError("No results found in the handleResults() function.")
-    print(result)
-
-    log = logger.bind(data=result.data)
-    if result.success:
-        log.success(result.message)
-    else:
-        log.error(result.message)
-
-
-@logger.catch(level="ERROR")
 @app.command("add")
 def add_task(
     context: typer.Context,
@@ -92,10 +70,9 @@ def add_task(
 
     # to override the old list[str] so mypys happy
     joined_name: str = (" ".join(name)).strip()
-    parsed_duedate = None
+    parsed_duedate: dt | None = None
     if duedate:
-        results = state.task_manager.parse_duedate(duedate)
-        parsed_duedate: dt | None = results.data if results.data else None
+        parsed_duedate = state.task_manager.parse_duedate(duedate)
 
     # the add_task function will deal with the missing values themselves
     logger.debug(
@@ -104,22 +81,25 @@ def add_task(
             "name": joined_name,
             "priority": priority,
             "status": status,
-            "duedate": parsed_duedate or None,
+            "duedate": parsed_duedate,
         },
     )
-    results = state.task_manager.add_task(
+    new_task = state.task_manager.add_task(
         joined_name,
         state.config,
         priority,
         status,
         parsed_duedate,
     )
-    handleResults(results)
-    if results.success:
-        display_tasks_table(context)
+    logger.success("Appended new task to the tasklist")
+    logger.debug(f"The new task contents: {new_task.to_dict()}")
+    print(
+        f"Successfully added new task '{new_task.name}' with ID {new_task.id} to the tasklist.",
+        style="success",
+    )
+    display_tasks_table(context)
 
 
-@logger.catch(level="ERROR")
 @app.command("delete")
 @app.command("remove", help="Alias for delete command")
 @app.command("del", help="Alias for delete command")
@@ -154,13 +134,12 @@ def delete_task(
         logger.info("Task deletion was cancelled")
         return
 
-    results = state.task_manager.delete_task(task_id)
-    handleResults(results)
-    if results.success:
-        display_tasks_table(context)
+    state.task_manager.delete_task(task_id)
+    logger.success(f"Succesfully deleted task with ID {task_id}")
+    print(f"Successfully deleted task with ID {task_id}", style="success")
+    display_tasks_table(context)
 
 
-@logger.catch(level="ERROR")
 @app.command("update")
 def update_task(
     context: typer.Context,
@@ -181,13 +160,11 @@ def update_task(
         ),
     ] = None,
 ) -> None:
-    """Updates a specific task given task ID. You can update the priority and duedate of the task .Does not allow updating statuses, use the mark command instead.
+    """Updates a specific task given task ID. You can update the priority and duedate of the task. Does not allow updating statuses, use the mark command instead.
 
     Args:
         context (typer.Context): The context required to read and write to the needed global variables
-        task_id (int): The task ID of the task that the user wants to update.
-        updated_name (str | None): The updated name given by the user. Defaults to None.
-        updated_priority (str | None): The updated priority given by the user. Defaults to None.
+        Other args are pretty self explanatory.
     """
     logger.info(
         "User invoked 'update' command",
@@ -197,13 +174,13 @@ def update_task(
     state: ContextObject = context.obj
 
     joined_updated_name: str | None = " ".join(updated_name) if updated_name else None
+    stripped_updated_priority = updated_priority.strip() if updated_priority else None
     parsed_updated_duedate = None
     if updated_duedate:
-        results = state.task_manager.parse_duedate(updated_duedate)
-        parsed_updated_duedate = results.data if results.data else None
+        parsed_updated_duedate = state.task_manager.parse_duedate(updated_duedate)
     raw_updated_contents = {
         "name": joined_updated_name,
-        "priority": updated_priority,
+        "priority": stripped_updated_priority,
         "duedate": parsed_updated_duedate or None,
     }
     logger.debug(
@@ -211,18 +188,17 @@ def update_task(
         command_params={
             "task_id": task_id,
             "updated_name": joined_updated_name,
-            "updated_priority": updated_priority,
+            "updated_priority": stripped_updated_priority,
             "updated_duedate": parsed_updated_duedate,
         },
     )
 
-    results = state.task_manager.update_task(task_id, raw_updated_contents)
-    handleResults(results)
-    if results.success:
-        display_tasks_table(context)
+    state.task_manager.update_task(task_id, raw_updated_contents)
+    logger.success(f"Successfully updated task with ID {task_id}")
+    print(f"Successfully updated task with ID {task_id}", style="success")
+    display_tasks_table(context)
 
 
-@logger.catch(level="ERROR")
 @app.command("mark")
 def mark_task(
     context: typer.Context,
@@ -252,10 +228,15 @@ def mark_task(
     state: ContextObject = context.obj
 
     # dw, the task class setter will deal with invalid statuses
-    results = state.task_manager.mark_task(task_id, updated_status)
-    handleResults(results)
-    if results.success:
-        display_tasks_table(context)
+    state.task_manager.mark_task(task_id, updated_status)
+    logger.success(
+        f"Successfully updated task ID {task_id} with status {updated_status}"
+    )
+    print(
+        f"Successfully updated task ID {task_id} with status {updated_status}",
+        style="success",
+    )
+    display_tasks_table(context)
 
 
 def display_tasks_table(context: typer.Context) -> None:
@@ -328,7 +309,6 @@ def display_tasks_table(context: typer.Context) -> None:
     # newlines to make it look better
 
 
-@logger.catch(level="ERROR")
 @app.command("list")
 @app.command("view", help="Alias for list command")
 @app.command("ls", help="Alias for list command")
@@ -339,7 +319,6 @@ def list_tasks(context: typer.Context) -> None:
     display_tasks_table(context)
 
 
-@logger.catch(level="ERROR")
 @app.command("clear")
 def clear_tasks(
     context: typer.Context,
@@ -371,11 +350,10 @@ def clear_tasks(
         print("Tasklist clear cancelled", style="info")
         logger.info("Cancelled clearing of tasklist")
         return
-    results = state.task_manager.clear_tasklist()
-    handleResults(results)
+    state.task_manager.clear_tasklist()
+    logger.success("Successfully cleared all tasks in tasklist!")
 
 
-@logger.catch(level="ERROR")
 @app.command("config")
 def config_cli(context: typer.Context) -> None:
     """To configure the TaskCLI settings.
@@ -389,7 +367,6 @@ def config_cli(context: typer.Context) -> None:
     state.config.main_configuration_ui()
 
 
-@logger.catch(level="ERROR")
 @app.command("reset")
 def reset_files():
     """Resets all the user data including the taskcli and configs, does not include logs."""
@@ -425,7 +402,8 @@ def initialize(
     logger.remove()
     logger.add(
         storage.MAIN_FILEPATH / "app.log",
-        rotation="12:00",
+        rotation="00:00",
+        retention=0,
         level="DEBUG",
         format="{time:DD-MM-YYYY_HH:mm:ss} > {name}:{line} > {level}: {message} | {extra}",
     )
@@ -450,7 +428,23 @@ def initialize(
 
 
 def main():
-    app()
+    try:
+        app()
+    except ValueError as error:
+        # These are usually the errors raised by your setters (invalid priority, etc.)
+        print(f"[bold red]Input Error:[/] {error}")
+        logger.error(error)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        # Handles Ctrl+C gracefully without a messy traceback
+        logger.debug("User did keyboard interrupt, operation cancelled")
+        print("\n[yellow]Operation cancelled by user.[/]")
+        sys.exit(0)
+    except Exception as error:
+        logger.opt(exception=True).critical("The app crashed unexpectedly.")
+        print(f"[bold red]CRITICAL ERROR:[/] {error}")
+        print("[dim]Please check the app.log for a full traceback.[/]")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

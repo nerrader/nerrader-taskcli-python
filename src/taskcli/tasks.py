@@ -23,8 +23,8 @@ class Task:
     ) -> None:
         self._id = next_id
         self.name = name
-        self._status = status
-        self._priority = priority
+        self.status = status
+        self.priority = priority
         self.duedate = duedate
 
     def to_dict(self) -> dict[str, Any]:
@@ -102,21 +102,6 @@ class Task:
         self._status = new_status
 
 
-@dataclass(frozen=True)
-class ResultManager:
-    """A dataclass for the result messages in tasklist manager functions."""
-
-    success: bool
-    message: str
-    data: Any = None
-
-    # This function runs if you want to print the resultmanager on the terminal
-    # Only used in main.py
-    def __rich__(self) -> str:
-        color = "green" if self.success else "red"
-        return f"[{color}]{self.message}[/{color}]"
-
-
 class TasklistManager:
     """This class should validate the tasks parameters before putting them in the tasks class, and also
     do some other stuff to manipulate the tasklist correctly"""
@@ -143,23 +128,32 @@ class TasklistManager:
         self._next_id = 1
         logger.info("Resetted next ID back to 1")
 
-    def find_target_task(self, target_id: int) -> Task | None:
+    def find_target_task(self, target_id: int) -> Task:
         """Finds the target task according to the target id passed as an argument,
-        then sends the entire dictionary of the task with that ID"""
+        then sends the entire dictionary of the task with that ID
+
+        Raises:
+            ValueError: If target task was not found."""
         target_task = next(
             (task for task in self.tasklist if task.id == target_id), None
         )
-        logger.debug("Found target task", task=target_task)
+        if not target_task:
+            logger.debug(f"No target task found for {target_id}")
+            raise ValueError(f"Could not find task with ID {target_id}")
+        logger.debug("Found target task", task=target_task.to_dict())
         return target_task
 
-    def parse_duedate(self, original_duedate: str) -> ResultManager:
+    def parse_duedate(self, original_duedate: str) -> dt:
         """Validates the duedate by running it through a dateparser function, and catching if it returns None.
 
         Args:
             original_duedate (str): The original string for the unparsed duedate
 
         Returns:
-            ResultManager: The results of the function. If run successfully will contain a datetime object in the data.
+            (dt): The datetime object.
+
+        Raises:
+            ValueError: If a duedate could not be parsed and it returns None, raise this error.
         """
         dateparse_settings = {
             "DATE_ORDER": "MDY",
@@ -170,12 +164,10 @@ class TasklistManager:
         )
         if not parsed_duedate:
             logger.error(f"Invalid duedate found: {original_duedate}. Setting to None.")
-            return ResultManager(
-                False,
+            raise ValueError(
                 f"Invalid duedate string found: {original_duedate}. Setting to None.",
-                id="set-duedate-none",
             )
-        return ResultManager(True, "Successfully parsed duedate", parsed_duedate)
+        return parsed_duedate
 
     def add_task(
         self,
@@ -184,73 +176,50 @@ class TasklistManager:
         priority: str | None = None,
         status: str | None = None,
         duedate: dt | None = None,
-    ) -> ResultManager:
+    ) -> Task:
         """Adds a task to the tasklist, where the name and the priority provided will be the
         attribute values for the task.
-
-        Returns:
-            ResultManager: The message that will be printed in the terminal in main.py
         """
-        try:
-            # if no priority, set priority to default
-            if not priority:
-                logger.info("No priority found in add task function.", data=priority)
-                priority = configs.default_priority
-                logger.debug(
-                    "Successfully set priority to default priority", data=priority
-                )
-            if not status:
-                logger.info("No status found in add task function.")
-                status = "todo"
-                logger.debug("Successfully set status to 'todo' (default)", data=status)
+        # if no priority, set priority to default
+        if not priority:
+            logger.info("No priority found in add task function.", data=priority)
+            priority = configs.default_priority
+            logger.debug("Successfully set priority to default priority", data=priority)
+        if not status:
+            logger.info("No status found in add task function.")
+            status = "todo"
+            logger.debug("Successfully set status to 'todo' (default)", data=status)
 
-            # duedate already parsed
-            new_task: Task = Task(
-                self.next_id,
-                name,
-                priority=priority,
-                status=status,
-                duedate=duedate,
-            )
-            self.tasklist.append(new_task)
+        # duedate already parsed
+        new_task: Task = Task(
+            self.next_id,
+            name,
+            priority=priority,
+            status=status,
+            duedate=duedate,
+        )
+        self.tasklist.append(new_task)
 
-            logger.success(
-                "Appended new task to the tasklist", task_dict=new_task.to_dict()
-            )
+        self.increment_id()
+        self.save_tasks()
 
-            self.increment_id()
-            self.save_tasks()
+        return new_task
 
-            return ResultManager(
-                True,
-                f"Successfully added task '{name}' with priority '{priority}' with ID {new_task.id}",
-            )
-        except ValueError as error:
-            # this valueerror only occurs if its an invalid priority or something, raised in task class setters
-            error_message = str(error)
-            return ResultManager(False, error_message)
-
-    def delete_task(self, task_id: int) -> ResultManager:
-        """Finds the task with the task_id in passed in using find_target-task(), then removes
+    def delete_task(self, task_id: int) -> None:
+        """Finds the task with the task_id in passed in using find_target_task(), then removes
         it from the self.tasklist
 
         Args:
             task_id (int): The target ID
-
-        Returns:
-            ResultManager: The results of the function
         """
         target_task = self.find_target_task(task_id)
-        if not target_task:
-            return ResultManager(False, f"Could not find task with ID {task_id}")
         self.tasklist.remove(target_task)
         self.save_tasks()
-        return ResultManager(True, f"Successfully deleted task with ID {task_id}")
 
     def _validate_update_contents(
         self,
         update_contents: dict[str, Any],
-    ) -> ResultManager:
+    ) -> dict[str, Any]:
         """
         MAY THIS ONLY BE USED ON FUNCTION update_task()
 
@@ -261,31 +230,25 @@ class TasklistManager:
             update_contents (dict[str, Any]): The updated contents to validate
 
         Returns:
-            ResultManager: The results returned by this function, containing either a failed
-            one or a successful one with data.
+            dict[str, str | dt]: The validated updated contents
+
+        Raises:
+            ValueError: If the new validated update contents were empty.
         """
 
         validated_update_contents = {
-            key: value
-            for key, value in update_contents.items()
-            if (
-                value.strip() if isinstance(value, str) else None
-            )  # if value.strip() exists if value exists
+            key: value for key, value in update_contents.items() if value
         }
+        # do this later
         if not validated_update_contents:
-            return ResultManager(False, "There were no contents to update")
+            raise ValueError("There were no contents to update in the first place.")
         # the checking if its a valid_priority will be done in the class itself using @property.setter
         logger.debug(
             "The validated update contents", contents=validated_update_contents
         )
-        return ResultManager(
-            True, "Updated contents seems good", validated_update_contents
-        )
+        return validated_update_contents
 
-    @logger.catch(level="ERROR")
-    def update_task(
-        self, task_id: int, updated_contents: dict[str, Any]
-    ) -> ResultManager:
+    def update_task(self, task_id: int, updated_contents: dict[str, Any]) -> None:
         """Updates tasks given the task_id and the updated_contents, updated_contents will be
         put through the helper function _validate_update_contents(), to help validate and get rid of
         unneccessary things in the updated_contents.
@@ -294,61 +257,37 @@ class TasklistManager:
             task_id (int): The task ID that is updated.
             updated_contents (dict[str, Any]): The contents of the tasks that will be updated using
             self.tasklist.update(updated_contents)
-
-        Returns:
-            ResultManager: The results of the function, giving a success/failure bool and a message of cause along with it.
         """
         # checks if the task_id exists
         target_task = self.find_target_task(task_id)
-        if not target_task:
-            return ResultManager(False, f"Could not find task with ID {task_id}")
-
-        # checks if the update contents are valid
-        results = self._validate_update_contents(updated_contents)
-        if not results.success:
-            return ResultManager(
-                False, f"The updated contents were not valid: {results.message}"
-            )
 
         # the data for the new validated update contents
-        updated_contents = results.data
+        updated_contents = self._validate_update_contents(updated_contents)
 
         # now to finally update it
         for key, value in updated_contents.items():
-            try:
-                setattr(target_task, key, value)
-            except ValueError as error:
-                error_message = str(error)
-                return ResultManager(False, error_message)
+            setattr(target_task, key, value)
 
         self.save_tasks()
-        return ResultManager(True, f"Successfully updated task ID {task_id}")
 
-    def mark_task(self, task_id: int, updated_status: str) -> ResultManager:
+    def mark_task(self, task_id: int, updated_status: str) -> None:
+        """Marks the targetted task with the new updated_status
+
+        Args:
+            task_id (int): The targetted task
+            updated_status (str): The new updated status
+        """
         target_task = self.find_target_task(task_id)
-        if not target_task:
-            return ResultManager(False, f"Could not find task with ID {task_id}")
 
-        try:
-            target_task.status = updated_status
-            self.save_tasks()
-            return ResultManager(
-                True,
-                f"Successfully updated task ID {task_id} with status {updated_status}",
-            )
-        except ValueError as error:
-            error_message = str(error)
-            return ResultManager(False, error_message)
+        target_task.status = updated_status
+        self.save_tasks()
 
-    @logger.catch(level="ERROR")
-    def clear_tasklist(self) -> ResultManager:
+    def clear_tasklist(self) -> None:
         self.tasklist = []
         self.reset_next_id()
         self.save_tasks()
-        return ResultManager(True, "Successfully cleared all tasks in tasklist!")
 
     # make it a docstring later, so basically it rehydrates those dictionaries into classes
-    @logger.catch(level="CRITICAL")
     def _rehydrate_loaded_tasks(self) -> list[Task]:
         """
         NOTE: THIS SHOULD ONLY BE USED IN THE __init__ FUNCTION OF TASK MANAGER CLASS
@@ -380,7 +319,6 @@ class TasklistManager:
         )
         return rehydrated_tasklist
 
-    @logger.catch(level="CRITICAL")
     def save_tasks(self) -> None:
         """Turns all the tasks into a dictionary, then saves all the tasks in storage.TASKS_FILEPATH
         (json file for storing tasks filepath)"""

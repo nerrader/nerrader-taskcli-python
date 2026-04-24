@@ -21,7 +21,7 @@ DEFAULT_TASKS: dict[str, Any] = {"next_id": 1, "tasklist": []}
 def load_json(filepath: Path) -> Any:
     try:
         logger.debug(f"Attemping to read JSON from {filepath}")
-        with open(filepath, "r") as file:
+        with open(filepath, "r", encoding="utf-8") as file:
             file_contents = json.load(file)
     except FileNotFoundError:
         file_contents = None
@@ -31,8 +31,8 @@ def load_json(filepath: Path) -> Any:
 
 def write_json(filepath: Path, data: Any) -> None:
     logger.debug(f"Writing data to {filepath}", write_data=data)
-    with open(filepath, "w") as file:
-        json.dump(data, file, indent=4)
+    with open(filepath, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
 
 
 def check_storage() -> None:
