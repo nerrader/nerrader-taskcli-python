@@ -719,7 +719,6 @@ dependencies = [
     { name = "loguru" },
     { name = "questionary" },
     { name = "typer" },
-    { name = "types-dateparser" },
 ]
 
 [package.dev-dependencies]
@@ -729,6 +728,7 @@ dev = [
     { name = "pyinstaller" },
     { name = "radon" },
     { name = "ruff" },
+    { name = "types-dateparser" },
     { name = "vulture" },
 ]
 
@@ -738,7 +738,6 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "questionary", specifier = ">=2.1.1" },
     { name = "typer", specifier = ">=0.24.1" },
-    { name = "types-dateparser", specifier = ">=1.4.0.20260408" },
 ]
 
 [package.metadata.requires-dev]
@@ -748,6 +747,7 @@ dev = [
     { name = "pyinstaller", specifier = ">=6.20.0" },
     { name = "radon", specifier = ">=6.0.1" },
     { name = "ruff", specifier = ">=0.15.9" },
+    { name = "types-dateparser", specifier = ">=1.4.0.20260408" },
     { name = "vulture", specifier = ">=2.16" },
 ]
 

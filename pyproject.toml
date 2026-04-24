@@ -13,7 +13,6 @@ dependencies = [
     "loguru>=0.7.3",
     "questionary>=2.1.1",
     "typer>=0.24.1",
-    "types-dateparser>=1.4.0.20260408",
 ]
 authors = [
     { name = "nerrader" }
@@ -27,6 +26,7 @@ dev = [
     "pyinstaller>=6.20.0",
     "radon>=6.0.1",
     "ruff>=0.15.9",
+    "types-dateparser>=1.4.0.20260408",
     "vulture>=2.16",
 ]
 
