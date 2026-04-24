@@ -31,7 +31,6 @@ app = typer.Typer()
 class ContextObject:
     task_manager: tasks.TasklistManager
     config: config.Config
-    verbose_mode: bool
 
 
 @app.command("add")
@@ -176,8 +175,10 @@ def update_task(
     joined_updated_name: str | None = " ".join(updated_name) if updated_name else None
     stripped_updated_priority = updated_priority.strip() if updated_priority else None
     parsed_updated_duedate = None
+
     if updated_duedate:
         parsed_updated_duedate = state.task_manager.parse_duedate(updated_duedate)
+
     raw_updated_contents = {
         "name": joined_updated_name,
         "priority": stripped_updated_priority,
@@ -239,71 +240,91 @@ def mark_task(
     display_tasks_table(context)
 
 
+def _get_styled_attribute(
+    attribute: str, task: tasks.Task, config: config.Config
+) -> str:
+    """It gets the rich styled string (with colors) associated with the attribute,
+    required for display_tasks_table()
+
+    NOTE: This is meant to be used only in display_tasks_table(), using it elsewhere might causes unwanted results.
+
+    Args:
+        attribute (str): The attribute you want to change.
+        task (tasks.Task): The task in which the attribute will be changed
+        config (config.Config): The configs to comply with the user's behaviour settings.
+
+    Raises:
+        ValueError: If it is not a valid task attribute, raise this error.
+
+    Returns:
+        str: The rich stylized and colored string associated with that attribute.
+    """
+    attribute = attribute.lower().strip()  # for more leniency
+
+    match attribute:
+        case "id":
+            return str(task.id)
+        case "name":
+            return task.name
+        case "status":
+            styled_status = f"[white]{task.status}[/]"
+            if config.behaviour_settings.show_status_colors:
+                status_colors: dict[str, str] = {
+                    "on-hold": "dim",
+                    "todo": "white",
+                    "doing": "bold blue",
+                    "done": "green4",
+                }
+                styled_status = f"[{status_colors[task.status]}]{task.status}[/]"
+            return styled_status
+        case "priority":
+            styled_priority = f"[white]{task.priority}[/]"
+            if config.behaviour_settings.show_priority_colors:
+                priority_colors: dict[str, str] = {
+                    "low": "green",
+                    "medium": "yellow",
+                    "high": "red",
+                    "urgent": "bold red3",
+                }
+                styled_priority = (
+                    f"[{priority_colors[task.priority]}]{task.priority}[/]"
+                )
+            return styled_priority
+        case "duedate":
+            formatted_duedate, task_duedate_color = task.get_formatted_duedate()
+            return f"[{task_duedate_color}]{formatted_duedate}[/]"
+        case _:
+            raise ValueError(f"Not a valid attribute: '{attribute}'")
+
+
 def display_tasks_table(context: typer.Context) -> None:
     """This is an internal CLI Command to display the rich table based off the tasklist."""
     # literally just for the autocomplete really
     state: ContextObject = context.obj
 
-    if len(state.task_manager.tasklist) == 0:
+    if len(state.task_manager.tasklist) <= 0:
         print("There is nothing in the tasklist...", style="info")
+        return
+
+    # making the tables with the correct columns
     tasks_table = Table(
         title="The Tasklist",
         show_lines=state.config.behaviour_settings.show_table_lines,
     )
-
-    # where else am i supposed to put it
-    if state.config.behaviour_settings.auto_clear_done_tasks:
-        state.task_manager.tasklist = [
-            task for task in state.task_manager.tasklist if task.status != "done"
-        ]
-        state.task_manager.save_tasks()
-
     for column_name in state.config.visible_columns:
         tasks_table.add_column(column_name)
 
-    priority_colors: dict[str, str] = {
-        "low": "green",
-        "medium": "yellow",
-        "high": "red",
-        "urgent": "bold red3",
-    }
-    status_colors: dict[str, str] = {
-        "on-hold": "dim",
-        "todo": "white",
-        "doing": "bold blue",
-        "done": "green4",
-    }
+    # where else am i supposed to put it
+    # this auto clears all done tasks
+    if state.config.behaviour_settings.auto_clear_done_tasks:
+        state.task_manager.clear_done_tasks()
 
     for task in state.task_manager.tasklist:
-        # this is for the show priority colors setting
-        task_priority_color: str = "white"
-        if state.config.behaviour_settings.show_priority_colors:
-            task_priority_color = priority_colors[task.priority]
-
-        # for the show status colors setting
-        task_status_color = "white"
-        if state.config.behaviour_settings.show_status_colors:
-            task_status_color = status_colors[task.status]
-
-        # for the formatting task duedate
-        # setting defaults if duedate is None
-        formatted_duedate, task_duedate_color = task.get_duedate_info()
-
-        visible_task_contents: list[str] = []
-
-        task_attribute_map = {
-            "ID": str(task.id),
-            "Name": task.name,
-            "Status": f"[{task_status_color}]{task.status}[/]",
-            "Priority": f"[{task_priority_color}]{task.priority}[/]",
-            "Duedate": f"[{task_duedate_color}]{formatted_duedate}[/]"
-            if formatted_duedate is not None
-            else "None",
-        }
-
-        for column_name in state.config.visible_columns:
-            visible_task_contents.append(task_attribute_map[column_name])
-        tasks_table.add_row(*visible_task_contents)
+        task_contents = [
+            _get_styled_attribute(column_name, task, state.config)
+            for column_name in state.config.visible_columns
+        ]
+        tasks_table.add_row(*task_contents)
 
     print("\n", tasks_table, "\n")
     # newlines to make it look better
@@ -421,7 +442,7 @@ def initialize(
             level="DEBUG",
         )
 
-    context.obj = ContextObject(task_manager, context_config, final_verbose_mode)
+    context.obj = ContextObject(task_manager, context_config)
     logger.debug(
         "App initialization done. Put all the variables needed in context.obj",
     )

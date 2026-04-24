@@ -77,6 +77,9 @@ class Config:
             not isinstance(new_visible_columns_list, list)
             or len(new_visible_columns_list) <= 0
         ):
+            logger.error(
+                "Could not set the new visible columns list as it had nothing to begin with, or it wasn't a list"
+            )
             raise TypeError("The new visible columns settings have nothing.")
         # if there is an item in the visible columns list that is not in the valid_visible_columns constant defined in the class
         invalid_column = next(
@@ -88,6 +91,9 @@ class Config:
             None,
         )
         if invalid_column:
+            logger.error(
+                f"Could not set new visible columns list: {new_visible_columns_list}. There was an invalid item in the visible columns config list: '{invalid_column}'"
+            )
             raise TypeError(
                 f"There is an invalid item in the visible columns config list: '{invalid_column}'"
             )
@@ -106,6 +112,9 @@ class Config:
             not isinstance(new_default, str)
             or new_default not in tasks.Task.VALID_PRIORITIES
         ):
+            logger.error(
+                f"The new default priority was not set as it wasn't valid: {new_default}"
+            )
             raise TypeError(
                 f"The new default priority value is not valid: {new_default}"
             )
@@ -115,13 +124,11 @@ class Config:
     def behaviour_settings(self):
         return self._behaviour_settings
 
-    @logger.catch(level="CRITICAL")
     def load_configs(self) -> dict:
         config_json: dict = storage.load_json(storage.CONFIG_FILEPATH)
         return config_json
 
     # pretty self explanatory i think
-    @logger.catch(level="CRITICAL")
     def save_config(self):
         data = {
             "visible_columns": self._visible_columns,
@@ -131,7 +138,6 @@ class Config:
         storage.write_json(storage.CONFIG_FILEPATH, data)
         logger.success("Successfully saved configs")
 
-    @logger.catch(level="ERROR")
     def _configure_table_column_visibility(self) -> None:
         """
         NOTE: THIS FUNCTION SHOULD ONLY BE CALLED IN main_configuration_ui()
@@ -157,7 +163,6 @@ class Config:
             logger.info("User cancelled visible columns change")
         return
 
-    @logger.catch(level="ERROR")
     def _configre_default_priority(self) -> None:
         """NOTE: THIS SHOULD ONLY BE USED ON main_configuration_ui()
 
@@ -177,7 +182,6 @@ class Config:
             logger.info("User cancelled default priority changes")
         return
 
-    @logger.catch(level="ERROR")
     def _configure_behaviour_settings(self) -> None:
         """NOTE: THIS SHOULD ONLY BE USED ON main_configuration_ui()
 
@@ -212,7 +216,6 @@ class Config:
                 continue
             setattr(self.behaviour_settings, behaviour_setting, False)
 
-    @logger.catch(level="ERROR")
     def reset_defaults(self) -> None:
         """
         NOTE: meant to be used in main_configuration_ui(), but maybe can be used somewhere else.
@@ -224,7 +227,6 @@ class Config:
         self._behaviour_settings = BehaviourConfig(**defaults["behaviour_settings"])
         logger.info("User has reset the configuration settings back to default.")
 
-    @logger.catch(level="ERROR")
     def main_configuration_ui(self) -> None:
         """pretty self explanatory, it creates the main configuration ui"""
         # why dont you make a new_config variable?

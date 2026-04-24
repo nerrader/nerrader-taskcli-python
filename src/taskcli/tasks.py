@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import Any
 
@@ -43,7 +42,7 @@ class Task:
             "duedate": self.duedate.isoformat() if self.duedate else None,
         }
 
-    def get_duedate_info(self) -> tuple[str, str]:
+    def get_formatted_duedate(self) -> tuple[str, str]:
         """Returns the general duedate info needed for the list tasks function
         NOTE: THIS FUNCTION WAS ONLY MEANT TO BE USED IN list_tasks() in main.py
 
@@ -105,6 +104,8 @@ class Task:
 class TasklistManager:
     """This class should validate the tasks parameters before putting them in the tasks class, and also
     do some other stuff to manipulate the tasklist correctly"""
+
+    PLACEHOLDER_TASKS: dict[str, Any] = {"next_id": 1, "tasklist": []}
 
     def __init__(self) -> None:
         data = storage.load_json(storage.TASKS_FILEPATH)
@@ -285,6 +286,11 @@ class TasklistManager:
     def clear_tasklist(self) -> None:
         self.tasklist = []
         self.reset_next_id()
+        self.save_tasks()
+
+    def clear_done_tasks(self) -> None:
+        """clears all the done tasks, and saves them."""
+        self.tasklist = [task for task in self.tasklist if task.status != "done"]
         self.save_tasks()
 
     # make it a docstring later, so basically it rehydrates those dictionaries into classes
