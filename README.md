@@ -91,7 +91,7 @@ Use `--help` after any command to find more about the **command's arguments, opt
 >
 > Also, make sure to **check and configure your settings** by using the `config` command, as **defaults might be undesirable.**
 
-#### Main TaskCLI Commands
+### Main TaskCLI Commands
 
 | Command  | Required Arguments          | Description                                                              |
 | :------: | :-------------------------- | :----------------------------------------------------------------------- |
@@ -112,7 +112,7 @@ Use `--help` after any command to find more about the **command's arguments, opt
 Here are some features that will be planned for **future major/minor releases** of the TaskCLI.
 
 - Sub-tasks in tasks
-- Task archiving to expand on the auto_clear_done_tasks config
+- Task statistics
 - List sorting
 - Testing using `pytest`
 
@@ -121,23 +121,27 @@ Here are some features that will be planned for **future major/minor releases** 
 This project welcomes all contributors, and whether you are fixing a bug, adding a new feature, or just improving the documentation of this project, you can get started by just following these steps:
 
 1. Fork this repository
+
 2. Clone this repository on your computer
 
-```bash
-git clone https://github.com/[YOUR-USERNAME]/nerrader-taskcli-python.git
-```
+    ```bash
+    git clone https://github.com/[YOUR-USERNAME]/nerrader-taskcli-python.git
+    ```
 
 3. It is recommended that you make a seperate branch than the main branch `git switch -c [NEW-BRANCH-NAME]`,
 
-```bash
-git switch -c [NEW-BRANCH-NAME]
-```
+    ```bash
+    git switch -c [NEW-BRANCH-NAME]
+    ```
 
-Branches should start with a branch prefix such as `feature/` for new features, and `fix/` to fix a known issue/bug, just to name a few.
+    Branches should start with a branch prefix such as `feature/` for new features, and `fix/` to fix a known issue/bug, just to name a few.
 
-4. Use `uv sync` to automatically set up the virtual environment and grab all the dependencies for you. <br>
-5. Commit your changes. Make sure your commit messages are clear and concise. <br>
-6. Push changes to your fork of the repository <br>
+4. Use `uv sync` to automatically set up the virtual environment and grab all the dependencies for you.
+
+5. Commit your changes. Make sure your commit messages are clear and concise.
+
+6. Push changes to your fork of the repository.
+
 7. Open a pull request. If you go back to the original repository, there should be a button called Compare & Pull Request. Click it, and one should be automaticallly made for you. Describe your changes and why they should be implemented in the main repository, then submit.
 
 > [!IMPORTANT]

@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Nothing added yet!
+
+## [3.0.2] - 2026-25-05
+
 - Improved README.md layout and formatting
 - Added config UI for the tasklists folder.
 - Tweaked the output statements in the `tasklists` command.
 - Fixed bug for first-time users where the histories folder couldn't be made.
-- Fixed the version number.
+- Fixed the version number, making the `--version` command up to date.
 
 ## [3.0.1] - 2026-05-20
 
@@ -65,6 +69,7 @@ This version marks the initial release of the TaskCLI.
 - Added more destructive commands, like `clear` to clear your entire tasklist, or `reset` for a full factory reset of your taskcli and configs.
 
 [Unreleased]: https://github.com/nerrader/nerraders-taskcli/compare/v3.0.1...HEAD
+[3.0.2]: https://github.com/nerrader/nerraders-taskcli/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/nerrader/nerraders-taskcli/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/nerrader/nerraders-taskcli/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/nerrader/nerraders-taskcli/compare/v2.0.0...v2.1.0
