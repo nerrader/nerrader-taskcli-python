@@ -1,6 +1,8 @@
 from copy import deepcopy
 from dataclasses import dataclass, asdict, fields
 from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog
 
 import questionary
 from loguru import logger
@@ -208,25 +210,27 @@ def _configure_tasklist_filepath(current_tasklist_dir_filepath: Path) -> Path:
     to ask the user where to store it.
     """
     logger.debug("User navigated to the configure tasklist filepath menu")
-    print("TIP: You can press the 'Tab' key for autocomplete.", style="info")
-    print(
-        "TIP: You can go into file explorer and copy and paste the path there instead.",
-        style="info",
+
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+
+    try:
+        root.wm_attributes("-topmost", True)
+    except tk.TclError:
+        pass
+
+    selected_folder_path = filedialog.askdirectory(
+        title="Select new Tasklist Directory",
+        initialdir=current_tasklist_dir_filepath,
+        mustexist=True,
     )
-    new_tasklist_filepath = questionary.path(
-        "What should the new folderpath be for storing your tasklists?",
-        only_directories=True,
-        validate=lambda filepath: (
-            Path(filepath).is_dir() if filepath else "Please enter a valid directory."
-        ),
-        default=str(current_tasklist_dir_filepath),
-        style=const.QUESTIONARY_STYLE,
-    ).ask()
+
+    root.destroy()
 
     # checks for ctrl + c, because it returns none if it got cancelled
-    if new_tasklist_filepath:
-        logger.info(f"User changed the tasklist folderpath to {new_tasklist_filepath}")
-        return Path(new_tasklist_filepath)
+    if selected_folder_path:
+        logger.info(f"User changed the tasklist folderpath to {selected_folder_path}")
+        return Path(selected_folder_path)
     else:
         logger.info("User cancelled tasklist folderpath changes")
         return current_tasklist_dir_filepath

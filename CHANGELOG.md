@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Improved README.md layout and formatting
+- Added config UI for the tasklists folder.
+- Tweaked the output statements in the `tasklists` command.
+- Fixed bug for first-time users where the histories folder couldn't be made.
+- Fixed the version number.
 
 ## [3.0.1] - 2026-05-20
 
