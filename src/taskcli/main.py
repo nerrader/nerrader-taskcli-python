@@ -541,7 +541,7 @@ def task_redo(context: typer.Context) -> None:
     original_state = deepcopy(state)
 
     if not state.history["redo_stack"]:
-        print("There is nothing to undo.", style="info")
+        print("There is nothing to redo.", style="info")
         return
 
     if redo_state := state.history["redo_stack"][-1]:
@@ -586,7 +586,7 @@ def add_tasklist(
 
     joined_name: str = (" ".join(name)).strip()
     tasks.add_tasklist(joined_name, state.config.tasklists_dir_filepath)
-    print(f"\nSuccessfully made a new tasklist: {joined_name}\n")
+    print(f"Successfully made a new tasklist: {joined_name}", style="success")
     logger.success(f"Successfully made a new tasklist: {joined_name}")
 
 
@@ -606,7 +606,7 @@ def delete_tasklist(
 
     joined_name: str = (" ".join(name)).strip()
     tasks.delete_tasklist(joined_name, state.config.tasklists_dir_filepath)
-    print(f"\nSuccessfully deleted a tasklist: {joined_name}\n")
+    print(f"Successfully deleted a tasklist: {joined_name}", style="success")
     logger.success(f"Successfully deleted a tasklist: {joined_name}")
 
 
@@ -624,7 +624,7 @@ def rename_tasklist(
 
     state: ContextObject = context.obj  # just for the autocomplete really
     tasks.rename_tasklist(old_name, new_name, state.config.tasklists_dir_filepath)
-    print(f"\nSuccessfully renamed tasklist into '{new_name}'\n")
+    print(f"Successfully renamed tasklist into '{new_name}'", style="success")
     logger.success(f"Successfully renamed tasklist into '{new_name}'")
 
 
@@ -643,7 +643,7 @@ def switch_tasklists(
     state.config.current_tasklist = switched_tasklist
     state.config.save_config()
 
-    print(f"\nSwitched to tasklist: {switched_tasklist}.\n", style="info")
+    print(f"Switched to tasklist: {switched_tasklist}.", style="info")
     logger.info(f"User switch to tasklist '{switched_tasklist}'")
 
 

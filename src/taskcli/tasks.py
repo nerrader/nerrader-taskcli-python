@@ -468,7 +468,8 @@ def switch_tasklists(tasklist_name: list[str], tasklists_dir_filepath: Path) -> 
 def list_tasklists(tasklists_dir_filepath: Path, current_tasklist: str) -> str:
     tasklists_message: str = ""
     for tasklist in _get_tasklists(tasklists_dir_filepath):
-        tasklists_message += (
-            f"- {tasklist} {'(CURRENT)' if tasklist == current_tasklist else ''}\n"
-        )
+        if tasklist == current_tasklist:
+            tasklists_message += f"[blue]- {tasklist} {'(CURRENT)' if tasklist == current_tasklist else ''}[/]\n"
+            continue
+        tasklists_message += f"- {tasklist}\n"
     return tasklists_message.strip()

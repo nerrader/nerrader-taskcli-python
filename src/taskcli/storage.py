@@ -36,6 +36,7 @@ def check_config_file() -> None:
 def check_history_file(history_filepath: Path) -> None:
     logger.debug("Checking storage for the history file.")
 
+    history_filepath.parent.mkdir(parents=True, exist_ok=True)
     if not history_filepath.is_file():
         write_json(history_filepath, const.PLACEHOLDER_HISTORY)
 
@@ -47,7 +48,7 @@ def check_tasklists(
 
     i think args are pretty self explanatory"""
     logger.debug("Checking storage")
-    # make both the main directory and tasks directory in the appdata if it doesn't exist
+    # make the tasks directory in the appdata if it doesn't exist
     tasks_dir_filepath.mkdir(parents=True, exist_ok=True)
 
     # check if the files exist, if not create them and fill them with default data
