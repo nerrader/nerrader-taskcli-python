@@ -36,11 +36,11 @@ So, I built this tool to get rid of my mental clutter by providing a way to bett
 
 ## How to Download & Use
 
-With these instructions, I am assuming you are using the **latest version of the tool**.
+With these instructions, I am assuming you are using the **latest version of the tool**, and you are on Windows 10 or above. (I haven't tested it for other OSes)
 
 1. **Download the .zip folder**, from the latest [release.](https://github.com/nerrader/nerrader-taskcli-python/releases)
 2. **Extract** the .zip folder.
-3. **Open your terminal**, and navigate to the **folder containing the .exe.**
+3. **Open your terminal**, and navigate to the **folder containing the .exe.** (You do not double click on it)
 4. Start running commands!
 
 > [!important]
@@ -170,4 +170,4 @@ This project uses external python libraries to help with the development process
 - Types-dateparser: To enable mypy to scan dateparser types.
 - Vulture: For catching dead code
 - Vermin: For checking the minimum Python version requirements (pyproject.toml)
-- Platformdirs: To help with the Multi-OS Compatibility Feature.
+- Platformdirs: To manage paths in a easier way
